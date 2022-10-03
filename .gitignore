@@ -9,6 +9,8 @@
 *.user
 *.userosscache
 *.sln.docstates
+.DS_Store
+.ipynb_checkpoints
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -301,7 +303,7 @@ node_modules/
 *.dsw
 *.dsp
 
-# Visual Studio 6 technical files 
+# Visual Studio 6 technical files
 *.ncb
 *.aps
 
