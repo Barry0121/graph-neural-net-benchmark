@@ -9,4 +9,7 @@ ADD . /dsc180-graph-neural-net
 # ARG password=${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}
 
 # Install packages not in the original image
-RUN conda install 
+RUN conda create --name gcn --file ./environment.txt
+
+# Activate the environment
+RUN conda activate gcn

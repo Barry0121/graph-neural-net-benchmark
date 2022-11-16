@@ -1,0 +1,4 @@
+{
+    "dockerhub-id": "Barry121/<image>:latest",
+    "build-script": "python run.py"
+}
