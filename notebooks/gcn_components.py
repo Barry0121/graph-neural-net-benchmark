@@ -1,3 +1,13 @@
+#####################################################################################
+# Graph Neural Network Components Module                                            #
+#                                                                                   #
+# Description:                                                                      #
+# This module contains the different graph neural network components, including     #
+# models, custom layers, and different optimizer and loss functions.                #
+#                                                                                   #
+# Code References:                                                                  #
+# 1.                                                                                #
+#####################################################################################
 
 # Standard pacakges
 import torch
@@ -19,7 +29,7 @@ class GCNConvCustom(nn.Module):
                 input_dim,
                 output_dim,
                 random_init=True,
-                with_bias=False,
+                with_bias=True,
                 device='cuda:0' if torch.cuda.is_available() else 'mps'):
         super(GCNConvCustom, self).__init__()
         # print("layer initialized")
@@ -49,6 +59,7 @@ class GCNConvCustom(nn.Module):
         # normalized adjacency matrix
         # self.A_s = torch.mm(torch.mm(self.D_half_norm, self.A), self.D_half_norm)
         self.A_s = self.D_half_norm @ self.A_self @ self.D_half_norm
+        self.A_s = self.A_s.to(self.device)
         # print(self.A_s.shape)
 
         # initialize learnable weights
@@ -56,12 +67,12 @@ class GCNConvCustom(nn.Module):
         self.W, self.b = None, None
         if random_init:
             self.W = torch.nn.Parameter(
-                data=(torch.rand(input_dim, output_dim, device=self.device) * 0.01),  # times it by 0.001 to make the weight smaller
+                data=(torch.rand(input_dim, output_dim, device=self.device)*0.01),  # times it by 0.001 to make the weight smaller
                 requires_grad=True
             )
             # create trainable a bias term for the layer
             self.b = torch.nn.Parameter(
-                data=(torch.rand(output_dim, 1, device=self.device) * 0.01),
+                data=(torch.rand(output_dim, 1, device=self.device)*0.01),
                 requires_grad=True
             )
         else:
@@ -107,7 +118,6 @@ class GCN_AE(nn.Module):
                 hidden_size_1,
                 hidden_size_2,
                 encoding_size,
-                output_size,
                 device= 'cuda:0' if torch.cuda.is_available() else 'mps'):
         super().__init__()
         # meta information
@@ -117,16 +127,15 @@ class GCN_AE(nn.Module):
         self.hidden_size_1 = hidden_size_1
         self.hidden_size_2 = hidden_size_2
         self.encoding_size = encoding_size
-        self.output_size = output_size
 
         # training utilities
-        self.criterion = None
-        self.optimizer = None
+        # self.criterion = None
+        # self.optimizer = None
 
         # layers
-        self.GCN_1 = GCNConvCustom(edge_index=self.edge_index, in_channels=self.input_size, out_channels=self.hidden_size_1, random_init=False, device=self.device)
-        self.GCN_2 = GCNConvCustom(edge_index=self.edge_index, in_channels=self.hidden_size_1, out_channels=self.hidden_size_2, random_init=False, device=self.device)
-        self.FC = nn.Linear(in_features=self.hidden_size_2, out_features=self.encoding_size)
+        self.GCN_1 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.input_size, output_dim=self.hidden_size_1, random_init=True, device=self.device)
+        self.GCN_2 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.hidden_size_1, output_dim=self.hidden_size_2, random_init=True, device=self.device)
+        self.FC = nn.Linear(in_features=self.hidden_size_2, out_features=self.encoding_size, device=self.device)
 
         # activations
         self.relu = nn.ReLU()
@@ -138,12 +147,13 @@ class GCN_AE(nn.Module):
         H = self.GCN_2(X_hat) # second layer: mean matrix
         H = self.relu(H)
         Z = self.FC(H)
-        Z = self.relu(Z) # this activation may or may not be here, doesn't make a difference
+        # Z = self.relu(Z) # this activation may or may not be here, doesn't make a difference
         return Z
 
     def decoder(self, Z):
-        Y_inner = torch.mm(Z.T, Z) # calculate inner product of matrix
-        Y_inner = Y_inner.reshape((-1)) # flatten the tensor
+        # TODO: we don't want matrix product, but inner product of each encoded vector
+        Y_inner = torch.mm(Z, Z.T) # calculate inner product of matrix
+        # Y_inner = Y_inner.reshape((-1)) # flatten the tensor
         Y = self.sigmoid(Y_inner) # apply activation
         return Y
 

@@ -1,3 +1,16 @@
+#####################################################################################
+# Model Utility Module                                                              #
+#                                                                                   #
+# Description:                                                                      #
+# This module generalize dataloading, training, validation, and testing process,    #
+# model saving and loading procedure, and table and graph generation for all        #
+# types of pytorch models.                                                          #
+#                                                                                   #
+# Code References:                                                                  #
+# 1. https://pytorch-geometric.readthedocs.io/en/latest/notes/introduction.html     #
+#####################################################################################
+
+
 # Standard pacakges
 import torch
 from torch import nn, utils
@@ -9,6 +22,9 @@ import matplotlib.pyplot as plt
 from torch_geometric import utils as gutils
 from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
+
+# GCN components (My own module)
+from gcn_components import *
 
 
 class model_utils:
