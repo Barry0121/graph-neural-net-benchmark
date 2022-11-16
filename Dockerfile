@@ -1,3 +1,8 @@
+#######################################################################################################################
+# Build with this command:                                                                                            #
+#       docker build -t [Barry121/graph-neural-network|Barry121/graph-neural-network:<#version>] .                    #
+#######################################################################################################################
+
 # Start from ucsdets/scipy-ml-notebook
 FROM ucsdets/scipy-ml-notebook
 

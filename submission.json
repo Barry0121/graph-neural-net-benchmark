@@ -1,4 +1,4 @@
 {
-    "dockerhub-id": "Barry121/<image>:latest",
+    "dockerhub-id": "Barry121/graph-neural-network:latest",
     "build-script": "python run.py"
 }
