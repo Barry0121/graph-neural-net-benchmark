@@ -168,7 +168,7 @@ class GCN_AE(nn.Module):
         output = self.decoder(Z)
         return output
 
-# TODO: Fix this module, GODDAM ITTTTT
+
 class GCN_VAE(nn.Module):
     """
     Graph Variational Convolutional Auto-Encoder
@@ -211,7 +211,7 @@ class GCN_VAE(nn.Module):
 
     def decoder(self, Z):
         Y_inner = torch.mm(Z.T, Z) # calculate inner product of matrix
-        Y_inner = Y_inner.reshape((-1)) # flatten the tensor
+        # Y_inner = Y_inner.reshape((-1)) # flatten the tensor
         Y = self.sigmoid(Y_inner) # apply activation
         return Y
 

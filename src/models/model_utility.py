@@ -83,10 +83,10 @@ class model_utils:
         pass
 
 
-def loader_cora_torch(filepath="../data/raw/Planetoid", transform=None, batch_size=1, shuffle=False):
+def loader_cora_torch(filepath="../data/raw/Planetoid", transform=None, batch_size=1, shuffle=True, device='cuda:0' if torch.cuda.is_available() else 'mps'):
     """Return the CORA dataset"""
     dataset = Planetoid(root=filepath, name='Cora', split='public', num_train_per_class=20, num_val=500, num_test=1000, transform=transform) # return a class of datasets
-    data = dataset[0]
+    data = dataset[0].to(device)
     # print some dataset statistics
     print(f'Loads Cora dataset, at root location: {filepath}')
     print(f'Number of nodes: {data.num_nodes}')
@@ -98,7 +98,4 @@ def loader_cora_torch(filepath="../data/raw/Planetoid", transform=None, batch_si
     print(f'Has self-loops: {data.has_self_loops()}')
     print(f'Is undirected: {data.is_undirected()}')
 
-    return data.edge_index, data.x, data.y
-
-
-edge_index, node_features, labels = loader_cora_torch(shuffle=True) # load the cora dataset
+    return data
