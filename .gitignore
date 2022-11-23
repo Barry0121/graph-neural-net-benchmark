@@ -404,13 +404,3 @@ FodyWeavers.xsd
 GCNs/
 FCNs/
 runs/
-
-*.pt
-*.ally
-*.index
-*.tx
-*.ty
-*.x
-*.graph
-*.allx
-*.y
