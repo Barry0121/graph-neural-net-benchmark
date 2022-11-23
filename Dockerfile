@@ -6,10 +6,9 @@
 #    second option lets the user specify version name.                                                                  #
 # 2. building process is going to take around 5-10 mins                                                                 #
 #########################################################################################################################
-
-
 # Start from ucsdets/scipy-ml-notebook
 FROM ucsdets/scipy-ml-notebook
+USER root
 
 # Add everything to project folder
 ADD . /dsc180-graph-neural-net
@@ -20,10 +19,15 @@ WORKDIR /dsc180-graph-neural-net
 # ARG password=${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}
 
 # Install packages not in the original image
-# RUN conda create --name gcn --file ./environment.txt # with conda
+# RUN pip install numpy pandas matplotlib
+# RUN pip install ipython
+# RUN pip install jupyter
+RUN pip install torch torchvision torchaudio
+RUN pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.13.0+cpu.html
 
-# OR with pip
-RUN pip install -r requirements.txt
+# Demonstrate the environment is activated:
+# RUN echo "Make sure torch-geometric is installed:"
+# RUN python -c "import torch_geometric"
 
 # Activate the environment to use custom packages
 # RUN conda activate gcn
