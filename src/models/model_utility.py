@@ -23,64 +23,60 @@ from torch_geometric import utils as gutils
 from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
 
-# GCN components (My own module)
-from gcn_components import *
+# class model_utils:
+#     def __init__(self, dataset, epochs):
+#         # store the data
+#         # TODO: Change the raw dataset to a dataloader object from PyTorch
+#         self.dataset = dataset
+#         if 'x' in self.dataset:
+#             self.node_features = self.dataset.x
+#         else:
+#             print("Input Dataset has no node features.")
+#         self.edge_index = self.dataset.edge_index
+#         self.node_labels = self.dataset.y
+
+#         # print some dataset statistics
+#         print(f'Number of nodes: {dataset.num_nodes}')
+#         print(f'Number of edges: {dataset.num_edges}')
+#         print(f'Average node degree: {dataset.num_edges / dataset.num_nodes:.2f}')
+#         if 'train_mask' in dataset:
+#             print(f'Number of training nodes: {dataset.train_mask.sum()}')
+#             print(f'Training node label rate: {int(dataset.train_mask.sum()) / dataset.num_nodes:.2f}')
+#         print(f'Has isolated nodes: {dataset.has_isolated_nodes()}')
+#         print(f'Has self-loops: {dataset.has_self_loops()}')
+#         print(f'Is undirected: {dataset.is_undirected()}')
 
 
-class model_utils:
-    def __init__(self, dataset, epochs):
-        # store the data
-        # TODO: Change the raw dataset to a dataloader object from PyTorch
-        self.dataset = dataset
-        if 'x' in self.dataset:
-            self.node_features = self.dataset.x
-        else:
-            print("Input Dataset has no node features.")
-        self.edge_index = self.dataset.edge_index
-        self.node_labels = self.dataset.y
+#         # training/validation split
 
-        # print some dataset statistics
-        print(f'Number of nodes: {dataset.num_nodes}')
-        print(f'Number of edges: {dataset.num_edges}')
-        print(f'Average node degree: {dataset.num_edges / dataset.num_nodes:.2f}')
-        if 'train_mask' in dataset:
-            print(f'Number of training nodes: {dataset.train_mask.sum()}')
-            print(f'Training node label rate: {int(dataset.train_mask.sum()) / dataset.num_nodes:.2f}')
-        print(f'Has isolated nodes: {dataset.has_isolated_nodes()}')
-        print(f'Has self-loops: {dataset.has_self_loops()}')
-        print(f'Is undirected: {dataset.is_undirected()}')
+#         # Hyperparameters
+#         self.epochs = epochs
+#         self.train_loss = []
+#         self.validation_loss = []
+#         self.test_loss = 0
+#         self.validation_acc = []
+#         self.test_acc = 0
 
 
-        # training/validation split
+#     """
+#     Utility functions:
+#     - load dataset
+#     - loss function
+#     - optimizer
+#     - train/validation
+#     - test
+#     """
 
-        # Hyperparameters
-        self.epochs = epochs
-        self.train_loss = []
-        self.validation_loss = []
-        self.test_loss = 0
-        self.validation_acc = []
-        self.test_acc = 0
+#     def initialize_training(self):
+#         """ Initialize Training Utilities """
+#         pass
 
+#     def train_step(self):
+#         """ One Training Step """
+#         pass
 
-    """
-    Utility functions:
-    - load dataset
-    - loss function
-    - optimizer
-    - train/validation
-    - test
-    """
-
-    def initialize_training(self):
-        """ Initialize Training Utilities """
-        pass
-
-    def train_step(self):
-        """ One Training Step """
-        pass
-
-    def test(self):
-        pass
+#     def test(self):
+#         pass
 
 
 def loader_cora_torch(filepath="../data/raw/Planetoid", transform=None, batch_size=1, shuffle=True, device='cuda:0' if torch.cuda.is_available() else 'mps'):
