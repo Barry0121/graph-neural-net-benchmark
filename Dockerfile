@@ -20,7 +20,10 @@ WORKDIR /dsc180-graph-neural-net
 # ARG password=${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}
 
 # Install packages not in the original image
-RUN conda create --name gcn --file ./environment.txt
+# RUN conda create --name gcn --file ./environment.txt # with conda
+
+# OR with pip
+RUN pip install -r requirements.txt
 
 # Activate the environment to use custom packages
 # RUN conda activate gcn
