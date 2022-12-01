@@ -1,99 +1,107 @@
 # Standard pacakges
 import torch
 from torch import nn, utils
-import networkx as nx
 import numpy as np
-import matplotlib.pyplot as plt
-import datetime, time
+import time, re
 import argparse
 
 # Pytroch Geometric
-from torch_geometric import utils as gutils
-from torch_geometric import nn as gnn # import layers
-from torch_geometric.datasets import Planetoid # import dataset CORA
+# from torch_geometric import utils as gutils
+# from torch_geometric import nn as gnn # import layers
+# from torch_geometric.datasets import Planetoid # import dataset CORA
+import torch_geometric.transforms as T
 
 # Import custom scripts
-from models.utility import *
-from models.layers import *
-from models.models import *
-from visualizations.viz_utility import * 
+from src.models.utility import *
+from src.models.layers import *
+from src.models.models import *
+from src.visualizations.viz_utility import *
 
 print("Package Import Successful!")
 time.sleep(2)
 
-def main(name="node-classification", epoches=200, hidden_size=1000, encode_size=100):
+def main(name="node-classification", dataset='cora', task='nodeclassification',
+        epochs=200, train_per_class=20, validation=500, testing=1000,
+        hidden_size=1000, encode_size=100):
+
     ##########################
     # Define Meta-variables  #
     ##########################
 
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    train_per_class = train_per_class
+    validation = validation
+    testing = testing
     hidden_size = encode_size
     encode_size = hidden_size
-    epoches = epoches
+    epochs = epochs
     name = name
 
 
     ##########################
     # Load CORA testing Data #
     ##########################
-    filepath = "./test/testdata/cora"
-    data = loader_cora_torch(filepath=filepath,
-                        transform=None,
-                        batch_size=1,
-                        shuffle=True,
-                        device=device)
+    if dataset == 'cora':
+        filepath = "./test/testdata/cora"
+        data = loader_cora_torch(filepath=filepath,
+                            transform=None,
+                            num_train_per_class=train_per_class,
+                            num_val=validation,
+                            num_test=testing,
+                            device=device)
 
-    # Note: we use train/val/test masks to create sub-datasets of edge indices for evaluation
-    edge_index, node_features, labels, train_mask, val_mask, test_mask = \
-        data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
-    print("Data loaded in 'test/testdata' directory! ")
-    time.sleep(2)
+        # Note: we use train/val/test masks to create sub-datasets of edge indices for evaluation
+        edge_index, node_features, labels, train_mask, val_mask, test_mask = \
+            data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
+        print("Data loaded in 'test/testdata' directory! ")
+
+    # TODO: Issue with pubmed - the graph is too big and need to be processed as a sparse matrix
+    # elif dataset == 'pubmed':
+    #     filepath = "./test/testdata/pubmed"
+    #     data = loader_pubmed_torch(filepath=filepath,
+    #                         transform=T.ToSparseTensor(),
+    #                         num_train_per_class=train_per_class,
+    #                         num_val=validation,
+    #                         num_test=testing,
+    #                         device=device)
+    #     # Note: we use train/val/test masks to create sub-datasets of edge indices for evaluation
+    #     edge_index, node_features, labels, train_mask, val_mask, test_mask = \
+    #         data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
+    #     print("Data loaded in 'test/testdata' directory! ")
+
+    elif dataset == 'citeseer':
+        filepath = "./test/testdata/citeseer"
+        data = loader_citeseer_torch(filepath=filepath,
+                            transform=None,
+                            num_train_per_class=train_per_class,
+                            num_val=validation,
+                            num_test=testing,
+                            device=device)
+        # Note: we use train/val/test masks to create sub-datasets of edge indices for evaluation
+        edge_index, node_features, labels, train_mask, val_mask, test_mask = \
+            data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
+        print("Data loaded in 'test/testdata' directory! ")
+    else:
+        print("Dataset is not available. Pick one of the two: (1) Cora (2) CiteSeer")
+        time.sleep(2)
+
+
 
     ################################
     # Setup Model, Loss, Optimizer #
     ################################
+    if task == 'nodeclassification':
+        print('Start Node Classification Task (Model: GCN)')
+        model = GCN(edge_index=edge_index, input_size=node_features.shape[1], hidden_size_1=hidden_size, encoding_size=encode_size, device=device)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+        criterion = nn.CrossEntropyLoss()
 
-    class GCN(nn.Module):
-        def __init__(self,
-                    edge_index,
-                    input_size,
-                    hidden_size_1,
-                    encoding_size,
-                    random_init = True,
-                    with_bias = True,
-                    device= 'cuda:0' if torch.cuda.is_available() else 'cpu'):
-            super().__init__()
-
-            # meta information
-            self.device = device
-            self.edge_index = edge_index
-            self.input_size = input_size
-            self.hidden_size_1 = hidden_size_1
-            self.encoding_size = encoding_size
-            self.random_init = random_init
-            self.with_bias = with_bias
-
-
-            self.conv1 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.input_size, output_dim=self.hidden_size_1, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
-            self.conv2 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.hidden_size_1, output_dim=self.encoding_size, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
-            # activations
-            self.relu = nn.ReLU()
-            self.softmax = nn.Softmax()
-            self.dropout = nn.Dropout()
-
-        def forward(self, x):
-            x = self.conv1(x)
-            x = self.relu(x)
-            x = self.dropout(x)
-            x = self.conv2(x)
-
-            return self.softmax(x)
-
-    model = GCN(edge_index=edge_index, input_size=node_features.shape[1], hidden_size_1=hidden_size, encoding_size=encode_size, device=device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
-    criterion = nn.CrossEntropyLoss()
-
-    print("Model Initialized!")
+        print("Model Initialized!")
+    elif task == 'edgeprediction':
+        print('Start Edge Prediction Task (Model: GCN-AE)')
+        return
+    else:
+        print("Specified Task is not available. Pick one of the two (1) Node Classification (2) Edge Prediction. ")
     time.sleep(3)
 
     #####################################
@@ -102,7 +110,7 @@ def main(name="node-classification", epoches=200, hidden_size=1000, encode_size=
     print("Start Training!")
     train_loss, val_loss, val_acc = [], [], []
 
-    for epoch in range(epoches):
+    for epoch in range(epochs):
         model.train()
         optimizer.zero_grad()
         out = model(node_features)
@@ -137,20 +145,33 @@ def main(name="node-classification", epoches=200, hidden_size=1000, encode_size=
 #############################
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Train and Test a Node Classification GCN')
+    # training
     parser.add_argument('-n', '--name', type=str, required=True, help='The Name for this Experiment')
-    parser.add_argument('-e', '--epoches', default=100, type=int)
+    parser.add_argument('-e', '--epochs', default=100, type=int)
+    parser.add_argument('-d', '--dataset', default='Cora', type=str, help='Choose between CORA and CITESEER')
+    parser.add_argument('-t', '--task', default='nodeclassification', type=str, help='Choose between Node_Classification and Edge_Prediction')
+    # model specification
     parser.add_argument('-hs', '--hidden_size', default=1000, type=int)
     parser.add_argument('-es', '--encode_size', default=50, type=int)
+    # train, validation, test split
+    parser.add_argument('-tr', '--train', type=int, default=20, help="Number of training samples per class.")
+    parser.add_argument('-v', '--validation', type=int, default=500, help="Number of validation samples.")
+    parser.add_argument('-te', '--test', type=int, default=1000, help="Number of testing samples.")
     args = parser.parse_args()
 
     name=args.name.replace(' ', '_')
-    epoches=args.epoches
+    dataset=args.dataset.lower()
+    epochs=args.epochs
+    train=args.train
+    validation=args.validation
+    test = args.test
     hidden_size=args.hidden_size
     encode_size=args.encode_size
+    task = re.sub('[^a-zA-Z]', '', args.task)
 
     print("Name of the Experiment: ", name, '\n')
-    print(f"Train with {epoches} # of epoches \n")
+    print(f"Train with {epochs} # of epoches \n")
     print(f"...with {hidden_size} as hidden layer's size \n")
     print(f"...with {encode_size} as encoding size. \n")
 
-    main(name, epoches, hidden_size, encode_size)
+    main(name, dataset, task, epochs, train, validation, test, hidden_size, encode_size)

@@ -45,24 +45,17 @@ class GCNConvCustom(nn.Module):
 
         self.A = gutils.to_dense_adj(edge_index).to(self.device)[0]
         self.A_self = self.A + torch.diag(torch.ones(self.A.shape[0], device=self.device))
-        # print("Adj Matrix with self loop: ", self.A)
 
         # calculate the degree matrix with A after added self loop
         self.D = torch.sum(self.A_self, dim=0).to(self.device)  # Note: these are the elements along the diagonal of D
-        # print("Degree Matrix: ", self.D)
 
         # for diagonal matrix, raising it to any power is the same as raising its diagonal elements to that power
         # we can just apply the -1/2 power to all element of this degree matrix
-        # self.D_half_norm = torch.reciprocal(torch.sqrt(self.D))
-        # self.D_half_norm = torch.from_numpy(fractional_matrix_power(self.D, -0.5)).to(self.device)
         self.D_half_norm = torch.diag(torch.pow(self.D, -0.5))
-        # print("Normalization Matrix: ", self.D_half_norm)
 
         # normalized adjacency matrix
-        # self.A_s = torch.mm(torch.mm(self.D_half_norm, self.A), self.D_half_norm)
         self.A_s = self.D_half_norm @ self.A_self @ self.D_half_norm
         self.A_s = self.A_s.to(self.device)
-        # print(self.A_s.shape)
 
         # initialize learnable weights
         # the weight should have shape of (N , F) where N is the size of the input, and F is the output dimension
@@ -94,6 +87,7 @@ class GCNConvCustom(nn.Module):
         else:
             return self.A_s @ (H @ self.W)
 
+    # Access methods
     def get_adj_matrix(self, with_self=False):
         if with_self:
             return self.A_self

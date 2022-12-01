@@ -12,6 +12,9 @@ from torch_geometric import utils as gutils
 from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
 
+# Custom Import
+from .layers import *
+
 class GCN(nn.Module):
         def __init__(self,
                     edge_index,
