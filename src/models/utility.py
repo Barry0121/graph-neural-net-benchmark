@@ -23,61 +23,14 @@ from torch_geometric import utils as gutils
 from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
 
-# class model_utils:
-#     def __init__(self, dataset, epochs):
-#         # store the data
-#         # TODO: Change the raw dataset to a dataloader object from PyTorch
-#         self.dataset = dataset
-#         if 'x' in self.dataset:
-#             self.node_features = self.dataset.x
-#         else:
-#             print("Input Dataset has no node features.")
-#         self.edge_index = self.dataset.edge_index
-#         self.node_labels = self.dataset.y
+def save_result(train_loss, val_loss, val_acc, name):
+    time_ran = str(datetime.datetime.now()).replace(" ", '-')
+    plt.plot(train_loss, color='blue')
+    plt.plot([i.cpu().data for i in val_loss], color='orange')
+    plt.savefig(f"./src/visualizations/{time_ran}_{name}_loss.png")
 
-#         # print some dataset statistics
-#         print(f'Number of nodes: {dataset.num_nodes}')
-#         print(f'Number of edges: {dataset.num_edges}')
-#         print(f'Average node degree: {dataset.num_edges / dataset.num_nodes:.2f}')
-#         if 'train_mask' in dataset:
-#             print(f'Number of training nodes: {dataset.train_mask.sum()}')
-#             print(f'Training node label rate: {int(dataset.train_mask.sum()) / dataset.num_nodes:.2f}')
-#         print(f'Has isolated nodes: {dataset.has_isolated_nodes()}')
-#         print(f'Has self-loops: {dataset.has_self_loops()}')
-#         print(f'Is undirected: {dataset.is_undirected()}')
-
-
-#         # training/validation split
-
-#         # Hyperparameters
-#         self.epochs = epochs
-#         self.train_loss = []
-#         self.validation_loss = []
-#         self.test_loss = 0
-#         self.validation_acc = []
-#         self.test_acc = 0
-
-
-#     """
-#     Utility functions:
-#     - load dataset
-#     - loss function
-#     - optimizer
-#     - train/validation
-#     - test
-#     """
-
-#     def initialize_training(self):
-#         """ Initialize Training Utilities """
-#         pass
-
-#     def train_step(self):
-#         """ One Training Step """
-#         pass
-
-#     def test(self):
-#         pass
-
+    plt.plot(val_acc, color='green')
+    plt.savefig(f"./src/visualizations/{time_ran}_{name}_accuracy.png")
 
 def loader_cora_torch(filepath="../data/raw/Planetoid", transform=None, batch_size=1, shuffle=True, device='cuda:0' if torch.cuda.is_available() else 'mps'):
     """Return the CORA dataset"""

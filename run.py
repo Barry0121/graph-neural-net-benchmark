@@ -1,4 +1,3 @@
-
 # Standard pacakges
 import torch
 from torch import nn, utils
@@ -14,27 +13,13 @@ from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
 
 # Import custom scripts
-from src.models.model_utility import *
-from src.models.gcn_components import *
+from models.utility import *
+from models.layers import *
+from models.models import *
+from visualizations.viz_utility import * 
+
 print("Package Import Successful!")
 time.sleep(2)
-
-def plot_result(train_loss, val_loss, val_acc):
-    plt.plot(train_loss, color='blue')
-    plt.plot([i.cpu().data for i in val_loss], color='orange')
-    plt.show()
-
-    plt.plot(val_acc, color='green')
-    plt.show()
-
-def save_result(train_loss, val_loss, val_acc, name):
-    time_ran = str(datetime.datetime.now()).replace(" ", '-')
-    plt.plot(train_loss, color='blue')
-    plt.plot([i.cpu().data for i in val_loss], color='orange')
-    plt.savefig(f"./src/visualizations/{time_ran}_{name}_loss.png")
-
-    plt.plot(val_acc, color='green')
-    plt.savefig(f"./src/visualizations/{time_ran}_{name}_accuracy.png")
 
 def main(name="node-classification", epoches=200, hidden_size=1000, encode_size=100):
     ##########################
