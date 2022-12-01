@@ -13,6 +13,8 @@
 .ipynb_checkpoints
 .vscode
 /data
+processed/
+raw/
 
 
 # User-specific files (MonoDevelop/Xamarin Studio)
