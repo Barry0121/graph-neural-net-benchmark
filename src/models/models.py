@@ -1,6 +1,7 @@
 # Standard pacakges
 import torch
 from torch import nn, utils
+import torch.nn.functional as F
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,9 +9,13 @@ import datetime, time
 import argparse
 
 # Pytroch Geometric
+import torch_geometric.transforms as T
 from torch_geometric import utils as gutils
 from torch_geometric import nn as gnn # import layers
-from torch_geometric.datasets import Planetoid # import dataset CORA
+from torch_geometric.data import NeighborSampler as RawNeighborSampler
+
+# Pytroch Cluster
+from torch_cluster import random_walk
 
 # Custom Import
 from .layers import *
@@ -71,7 +76,7 @@ class GCN_AE(nn.Module):
         super().__init__()
         # meta information
         self.device = device
-        self.edge_index = edge_index # same as edge list, replace adjacency matrix
+        self.edge_index = edge_index
         self.input_size = input_size
         self.hidden_size_1 = hidden_size_1
         self.hidden_size_2 = hidden_size_2
@@ -79,27 +84,22 @@ class GCN_AE(nn.Module):
         self.random_init = random_init
         self.with_bias = with_bias
 
-        # training utilities
-        # self.criterion = None
-        # self.optimizer = None
-
         # layers
         self.GCN_1 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.input_size, output_dim=self.hidden_size_1, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
-        self.GCN_2 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.hidden_size_1, output_dim=self.encoding_size, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
-        # self.FC = nn.Linear(in_features=self.hidden_size_2, out_features=self.encoding_size, device=self.device)
-
+        self.GCN_2 = GCNConvCustom(edge_index=self.edge_index, input_dim=self.hidden_size_1, output_dim=self.hidden_size_2, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
+        self.FC = nn.Linear(in_features=self.hidden_size_2, out_features=self.encoding_size, device=self.device)
         # activations
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
     def encoder(self, X):
         X_hat = self.GCN_1(X) # first layer: lower dimension feature matrix
-        # X_hat = self.relu(X_hat)
+        X_hat = self.relu(X_hat)
         H = self.GCN_2(X_hat) # second layer: mean matrix
-        # Z = self.relu(H)
-        # Z = self.FC(H)
-        # Z = self.relu(Z) # this activation may or may not be here, doesn't make a difference
-        return H
+        Z = self.relu(H)
+        Z = self.FC(H)
+        Z = self.relu(Z) # this activation may or may not be here, doesn't make a difference
+        return Z
 
     def decoder(self, Z):
         Y_inner = torch.mm(Z, Z.T) # calculate inner product of matrix
@@ -113,53 +113,44 @@ class GCN_AE(nn.Module):
         return output
 
 
-class GCN_VAE(nn.Module):
+"""
+# This needs to be run before model training
+# For each batch and the adjacency matrix
+pos_batch = random_walk(row, col, batch,
+                          walk_length=1,
+                          coalesced=False)[:, 1]
+# row are source nodes, col are target nodes from Adjacency matrix
+# index 1 is taken as positive nodes
+# Random targets from whole adjacency matrix
+neg_batch = torch.randint(0, self.adj_t.size(1), (batch.numel(), ),
+                                  dtype=torch.long)
+"""
+
+class SAGE(nn.Module):
     """
-    Graph Variational Convolutional Auto-Encoder
-
-    GCN layer implementation from:
-        https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.conv.GCNConv
+    Implementation is from: https://towardsdatascience.com/pytorch-geometric-graph-embedding-da71d614c3a
     """
-    def __init__(self,
-                edge_index,
-                input_size,
-                hidden_size,
-                encoding_size,
-                output_size,
-                device= 'cuda:0' if torch.cuda.is_available() else 'mps'):
-        super().__init__()
-        # meta information
-        self.device = device
-        self.edge_index = edge_index # same as edge list, replace adjacency matrix
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.encoding_size = encoding_size
-        self.output_size = output_size
+    def __init__(self, in_channels, hidden_channels, num_layers):
+        super(SAGE, self).__init__()
+        self.num_layers = num_layers
+        self.convs = gnn.ModuleList()
 
-        # layers
-        self.GCN_1 = gnn.GCNConv(in_channels=self.input_size, out_channels=self.hidden_size, normalize=False, device=self.device)
-        self.GCN_2 = gnn.GCNConv(in_channels=self.hidden_size, out_channels=self.encoding_size, normalize=False, device=self.device)
-
-        # activations
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def encoder(self, X):
-        X_hat = self.GCN_1(X, self.edge_index) # first layer: lower dimension feature matrix
-        X_hat = self.relu(X_hat)
-        Z_mean = self.GCN_2(X_hat, self.edge_index) # second layer: mean matrix
-        Z_logstd = self.GCN_2(X_hat, self.edge_index) # second layer: natural log of squared standard deviation
-        Z_std = torch.sqrt(torch.exp(Z_logstd)) # calculate the standard deviation
-        Z = torch.normal(Z_mean, Z_std) # random sample from normal distribution with the calculated mean and std
-        return Z
-
-    def decoder(self, Z):
-        Y_inner = torch.mm(Z.T, Z) # calculate inner product of matrix
-        # Y_inner = Y_inner.reshape((-1)) # flatten the tensor
-        Y = self.sigmoid(Y_inner) # apply activation
-        return Y
-
-    def forward(self, X):
-        Z = self.encoder(X)
-        output = self.decoder(Z)
-        return output
+        for i in range(num_layers):
+            in_channels = in_channels if i == 0 else hidden_channels
+            self.convs.append(gnn.SAGEConv(in_channels,
+                                   hidden_channels))
+    def forward(self, x, adjs):
+        for i, (edge_index, _, size) in enumerate(adjs):
+            x_target = x[:size[1]]
+            x = self.convs[i]((x, x_target), edge_index)
+            if i != self.num_layers - 1:
+                x = x.relu()
+                x = F.dropout(x, p=0.5, training=self.training)
+        return x
+    def full_forward(self, x, edge_index):
+        for i, conv in enumerate(self.convs):
+            x = conv(x, edge_index)
+            if i != self.num_layers - 1:
+                x = x.relu()
+                x = F.dropout(x, p=0.5, training=self.training)
+        return x
