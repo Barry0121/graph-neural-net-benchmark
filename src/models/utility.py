@@ -25,15 +25,6 @@ from torch_geometric import nn as gnn # import layers
 from torch_geometric.datasets import Planetoid # import dataset CORA
 import torch_geometric.transforms as T
 
-def save_result(train_loss, val_loss, val_acc, name):
-    time_ran = str(datetime.datetime.now()).replace(" ", '-')
-    plt.plot(train_loss, color='blue')
-    plt.plot([i.cpu().data for i in val_loss], color='orange')
-    plt.savefig(f"./src/visualizations/{time_ran}_{name}_loss.png")
-
-    plt.plot(val_acc, color='green')
-    plt.savefig(f"./src/visualizations/{time_ran}_{name}_accuracy.png")
-
 def loader_cora_torch(filepath="../data/raw/Planetoid",
                         num_train_per_class=20, num_val=500, num_test=1000, transform=None,
                         device='cuda:0' if torch.cuda.is_available() else 'mps'):
