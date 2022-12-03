@@ -24,8 +24,6 @@ from torch_geometric.datasets import Planetoid # import dataset CORA
 
 class GCNConvCustom(nn.Module):
     def __init__(self,
-                edge_index,
-                # node_batch,
                 input_dim,
                 output_dim,
                 scale=1,
@@ -33,29 +31,13 @@ class GCNConvCustom(nn.Module):
                 with_bias=True,
                 device='cuda:0' if torch.cuda.is_available() else 'mps'):
         super(GCNConvCustom, self).__init__()
-        # print("layer initialized")
 
         """Metadata"""
         self.device = device # initialize the hosting device
         self.with_bias = with_bias
         self.scale = scale
 
-        """Calculate Matrices"""
-        # the adjacency matrix with self-loop
-
-        self.A = gutils.to_dense_adj(edge_index).to(self.device)[0]
-        self.A_self = self.A + torch.diag(torch.ones(self.A.shape[0], device=self.device))
-
-        # calculate the degree matrix with A after added self loop
-        self.D = torch.sum(self.A_self, dim=0).to(self.device)  # Note: these are the elements along the diagonal of D
-
-        # for diagonal matrix, raising it to any power is the same as raising its diagonal elements to that power
-        # we can just apply the -1/2 power to all element of this degree matrix
-        self.D_half_norm = torch.diag(torch.pow(self.D, -0.5))
-
-        # normalized adjacency matrix
-        self.A_s = self.D_half_norm @ self.A_self @ self.D_half_norm
-        self.A_s = self.A_s.to(self.device)
+        self.As = None
 
         # initialize learnable weights
         # the weight should have shape of (N , F) where N is the size of the input, and F is the output dimension
@@ -81,22 +63,29 @@ class GCNConvCustom(nn.Module):
                 requires_grad=True
             )
 
-    def forward(self, H):
+    def forward(self, H, edge_list):
+        self.A_s = self.get_normalized_adj(edge_list)
+
         if self.with_bias:
             return self.A_s @ (H @ self.W) + self.b.T
         else:
             return self.A_s @ (H @ self.W)
 
-    # Access methods
-    def get_adj_matrix(self, with_self=False):
-        if with_self:
-            return self.A_self
-        return self.A
+    def get_normalized_adj(self, edge_list):
+        """Calculate Matrices"""
+        # the adjacency matrix with self-loop
 
-    def get_normalized_adj_matrix(self):
+        self.A = gutils.to_dense_adj(edge_list).to(self.device)[0]
+        self.A_self = self.A + torch.diag(torch.ones(self.A.shape[0], device=self.device))
+
+        # calculate the degree matrix with A after added self loop
+        self.D = torch.sum(self.A_self, dim=0).to(self.device)  # Note: these are the elements along the diagonal of D
+
+        # for diagonal matrix, raising it to any power is the same as raising its diagonal elements to that power
+        # we can just apply the -1/2 power to all element of this degree matrix
+        self.D_half_norm = torch.diag(torch.pow(self.D, -0.5))
+
+        # normalized adjacency matrix
+        self.A_s = self.D_half_norm @ self.A_self @ self.D_half_norm
+        self.A_s = self.A_s.to(self.device)
         return self.A_s
-
-    def get_degree_matrix(self, normalization=False):
-        if normalization:
-            return self.D_half_norm
-        return self.D

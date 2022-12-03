@@ -83,13 +83,13 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     ################################
     if task == 'nodeclassification':
         print('Start Node Classification Task (Model: GCN)')
-        model = GCN(edge_index=edge_index, input_size=node_features.shape[1], hidden_size_1=hidden_size, encoding_size=encode_size, device=device)
+        model = GCN(input_size=node_features.shape[1], hidden_size_1=hidden_size, encoding_size=encode_size, device=device)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
         criterion = nn.CrossEntropyLoss()
         print("Model Initialized!")
     elif task == 'edgeprediction':
         print('Start Edge Prediction Task (Model: GCN-AE)')
-        model = GCN_AE(edge_index=train_data.edge_index, input_size=train_data.x.shape[1], hidden_size_1=hidden_size, hidden_size_2=(hidden_size+encode_size)//2, encoding_size=encode_size, device=device)
+        model = GCN_AE(input_size=train_data.x.shape[1], hidden_size_1=hidden_size, hidden_size_2=(hidden_size+encode_size)//2, encoding_size=encode_size, device=device)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
         criterion = nn.CrossEntropyLoss()
         print("Model Initialized!")
@@ -107,13 +107,13 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
         for epoch in range(epochs):
             model.train()
             optimizer.zero_grad()
-            out = model(node_features)
+            out = model(node_features, edge_index)
             loss = criterion(out[train_mask], labels[train_mask])
             loss.backward()
             optimizer.step()
 
             model.eval()
-            output = model(node_features)
+            output = model(node_features, edge_index)
             vloss = criterion(output[val_mask], labels[val_mask])
 
             train_loss.append(loss.cpu().detach().numpy())
@@ -127,9 +127,9 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                 # train
                 model.train()
                 optimizer.zero_grad()
-                model.edge_index = train_data.edge_index
-                output = model.encoder(train_data.x)
-                output = gutils.dense_to_sparse(output)[0]
+                # model.edge_index =
+                output = model.encoder(train_data.x, train_data.edge_index)
+                # output = gutils.dense_to_sparse(output)[0]
                 print(output.shape)
                 loss = criterion(output.float(), train_data.pos_edge_label_index)
                 loss.backward()
@@ -155,7 +155,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     ##################
     if task == 'nodeclassification':
         model.eval()
-        pred = model(node_features).argmax(dim=1)
+        pred = model(node_features, edge_index).argmax(dim=1)
         correct = (pred[test_mask] == labels[test_mask]).sum()
         acc = int(correct) / int(test_mask.sum())
         print(f'Test Accuracy: {acc:.4f}')
