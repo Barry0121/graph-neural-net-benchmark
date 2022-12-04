@@ -32,7 +32,8 @@ def save_result(root_path, expt_name, train_loss, val_loss, val_acc):
     ax.set_xlabel("Epochs")
     ax.set_ylabel("Loss")
     ax.plot(train_loss, color='blue', label='Training Loss')
-    ax.plot([i.cpu().data for i in val_loss], color='orange', label='Validation Loss')
+    if val_loss is not None:
+        ax.plot([i.cpu().data for i in val_loss], color='orange', label='Validation Loss')
     ax.legend()
     plt.savefig(path1)
 

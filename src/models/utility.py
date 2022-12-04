@@ -85,3 +85,15 @@ def loader_citeseer_torch(filepath="../data/raw/Planetoid",
     print(f'Has self-loops: {data.has_self_loops()}')
     print(f'Is undirected: {data.is_undirected()}')
     return data
+
+# class EncodingLoss(nn.Module):
+#     def __init__(self):
+#         super(EncodingLoss, self).__init__()
+
+#     def forward(self, node_embeddings, target_edge_list):
+#         loss = 0
+#         for i in range(target_edge_list.shape[1]):
+#             edge1, edge2 = target_edge_list[:, i]
+#             link = torch.sigmoid(node_embeddings[edge1].T @ node_embeddings[edge2])
+#             loss += 1 if link < 0.5 else 0
+#         return torch.tensor(loss)
