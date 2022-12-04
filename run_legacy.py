@@ -161,6 +161,27 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                 train_loss.append(loss)
                 val_loss.append(vap)
                 val_acc.append(vauc)
+                # # train
+                # optimizer.zero_grad()
+                # output = model(train_data.x, train_data.edge_index) # Note: output is each node's encoding [# of nodes, encode_size]
+                # # output_edge_list = match_edge_list(output.float(), train_data.pos_edge_label_index)
+                # loss = criterion(output.reshape(-1).float(), train_target_adj)
+                # loss.backward()
+                # optimizer.step()
+                # # print(output)
+                # # break
+
+                # # calculate accuracy
+                # with torch.no_grad():
+                #     output = model(val_data.x, val_data.edge_index, adj_matrix=True)
+                #     vloss = criterion(output.reshape(-1).float(), val_target_adj)
+                #     accuracy = torch.mean(output.reshape(-1).float() == val_target_adj, dtype=torch.float).item()
+
+                #     train_loss.append(loss)
+                #     val_loss.append(vloss)
+                #     val_acc.append(accuracy)
+
+
 
     print("Finish Training!")
     time.sleep(1)
