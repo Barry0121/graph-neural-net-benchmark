@@ -1,4 +1,4 @@
 {
     "dockerhub-id": "barry121/graph-neural-network:latest",
-    "build-script": "python run.py -n 'node classification' -e 200 -hs 1000 -es 50"
+    "build-script": "python run.py --name 'node_classification_test' --dataset 'CiteSeer' --task 'Node Classification"
 }

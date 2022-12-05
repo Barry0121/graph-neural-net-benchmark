@@ -40,7 +40,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     # Load CORA testing Data #
     ##########################
     if dataset == 'cora':
-        filepath = "./test/testdata/cora"
+        filepath = "./data/raw/cora"
         data = loader_cora_torch(filepath=filepath,
                             transform=None,
                             num_train_per_class=train_per_class,
@@ -49,7 +49,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                             device=device)
 
     elif dataset == 'citeseer':
-        filepath = "./test/testdata/citeseer"
+        filepath = "./data/raw/citeseer"
         data = loader_citeseer_torch(filepath=filepath,
                             transform=None,
                             num_train_per_class=train_per_class,
@@ -57,7 +57,13 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                             num_test=testing,
                             device=device)
     else:
-        print("Dataset is not available. Pick one of the two: (1) Cora (2) CiteSeer")
+        filepath = "./data/raw/pubmed"
+        data = loader_pubmed_torch(filepath=filepath,
+                            transform=None,
+                            num_train_per_class=train_per_class,
+                            num_val=validation,
+                            num_test=testing,
+                            device=device)
 
 
     if task == 'edgeprediction':
@@ -70,7 +76,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
         edge_index, node_features, labels, train_mask, val_mask, test_mask = \
             data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
 
-    print("Data loaded in 'test/testdata' directory! ")
+    print(f"Data loaded in '{filepath}' directory! ")
     time.sleep(2)
 
 
@@ -176,6 +182,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     print("Saving visualizations...")
 
     save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
+    # save_result(os.path.join('src', 'visualizations'), name, train_loss, val_loss, val_acc)
 
 
 #############################
