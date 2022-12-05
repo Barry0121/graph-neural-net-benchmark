@@ -34,15 +34,20 @@ class FCN(nn.Module):
         self.encoding_size = encoding_size
 
         self.fc1 = nn.Linear(in_features=input_size, out_features=hidden_size_1, bias=True, device=self.device)
-        self.fc2 = nn.Linear(in_features=hidden_size_2, out_features=encoding_size, bias=True, device=self.device)
+        self.fc2 = nn.Linear(in_features=hidden_size_1, out_features=hidden_size_2, bias=True, device=self.device)
+        self.fc3 = nn.Linear(in_features=hidden_size_2, out_features=encoding_size, bias=True, device=self.device)
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, node_feature1, node_feature2):
-        X = torch.cat(node_feature1, node_feature2, dim=1)
-        out = self.fc1(X)
+    def forward(self, node_feature):
+        # node_features1 = torch.stack([node_feature1]*node_features.shape[0], dim=0)
+        # X = torch.cat([node_feature1, node_features], dim=0)
+        # print(node_feature1.shape)
+        out = self.fc1(node_feature)
         out = self.relu(out)
         out = self.fc2(out)
+        out = self.relu(out)
+        out = self.fc3(out)
         out = self.sigmoid(out)
         return out
 

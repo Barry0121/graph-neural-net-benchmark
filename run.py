@@ -62,9 +62,6 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
 
     if task == 'edgeprediction':
         print('Split data for edge  prediction task')
-        # transform = T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
-        #                             split_labels=True, add_negative_train_samples=False)
-        # train_data, val_data, test_data = transform(data)
         data.train_mask = data.val_mask = data.test_mask = None
         data = gutils.train_test_split_edges(data)
 
@@ -152,6 +149,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             for epoch in tepoch:
                 loss = train()
                 vauc, vap = test(data.val_pos_edge_index, data.val_neg_edge_index)
+            
                 train_loss.append(loss)
                 val_loss.append(vap)
                 val_acc.append(vauc)
@@ -175,9 +173,9 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     ####################
     # Save Loss Curves #
     ####################
-    # print("Saving visualizations...")
+    print("Saving visualizations...")
 
-    # save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
+    save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
 
 
 #############################

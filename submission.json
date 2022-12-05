@@ -1,4 +1,4 @@
 {
-    "dockerhub-id": "Barry121/graph-neural-network:latest",
-    "build-script": "python run.py -n 'node classification' -e 300 -hs 1000 -es 50"
+    "dockerhub-id": "barry121/graph-neural-network:latest",
+    "build-script": "python run.py -n 'node classification' -e 200 -hs 1000 -es 50"
 }
