@@ -109,9 +109,9 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     if task == 'nodeclassification':
         train_loss, val_loss, val_acc = [], [], []
         with tqdm.tqdm(range(epochs), unit="epochs") as tepoch:
-            for epoch in range(tepoch):
+            for epoch in (tepoch):
                 optimizer.zero_grad()
-                out = model(node_features, edge_index, adj_matrix=False)
+                out = model(node_features, edge_index)
                 loss = criterion(out[train_mask], labels[train_mask])
                 loss.backward()
                 optimizer.step()
@@ -149,7 +149,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             for epoch in tepoch:
                 loss = train()
                 vauc, vap = test(data.val_pos_edge_index, data.val_neg_edge_index)
-            
+
                 train_loss.append(loss)
                 val_loss.append(vap)
                 val_acc.append(vauc)
