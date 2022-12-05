@@ -181,8 +181,8 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     ####################
     print("Saving visualizations...")
 
-    save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
-    # save_result(os.path.join('src', 'visualizations'), name, train_loss, val_loss, val_acc)
+    # save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
+    save_result(os.path.join('src', 'visualizations'), name, train_loss, val_loss, val_acc)
 
 
 #############################
