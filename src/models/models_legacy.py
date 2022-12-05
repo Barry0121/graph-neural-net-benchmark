@@ -21,32 +21,8 @@ from torch_cluster import random_walk
 from .layers import *
 
 class FCN(nn.Module):
-    def __init__(self,
-                input_size,
-                hidden_size_1,
-                hidden_size_2,
-                encoding_size,
-                device= 'cuda:0' if torch.cuda.is_available() else 'cpu'):
-        super().__init__()
-        self.device = device
-        self.input_size = input_size
-        self.hidden_size_1 = hidden_size_1
-        self.encoding_size = encoding_size
-
-        self.fc1 = nn.Linear(in_features=input_size, out_features=hidden_size_1, bias=True, device=self.device)
-        self.fc2 = nn.Linear(in_features=hidden_size_2, out_features=encoding_size, bias=True, device=self.device)
-        self.relu = nn.ReLU()
-        self.sigmoid = nn.Sigmoid()
-
-    def forward(self, node_feature1, node_feature2):
-        X = torch.cat(node_feature1, node_feature2, dim=1)
-        out = self.fc1(X)
-        out = self.relu(out)
-        out = self.fc2(out)
-        out = self.sigmoid(out)
-        return out
-
-
+    def __init__():
+        pass
 
 class GCN(nn.Module):
     def __init__(self,
@@ -82,6 +58,62 @@ class GCN(nn.Module):
 
         return self.softmax(x)
 
+
+# class GCN_AE(nn.Module):
+#     """
+#     Graph Convolutional Auto-Encoder
+
+#     GCN layer implementation from:
+#         https://pytorch-geometric.readthedocs.io/en/latest/modules/nn.html#torch_geometric.nn.conv.GCNConv
+#     """
+#     def __init__(self,
+#                 input_size,
+#                 hidden_size_1,
+#                 hidden_size_2,
+#                 encoding_size,
+#                 random_init = True,
+#                 with_bias = True,
+#                 device= 'cuda:0' if torch.cuda.is_available() else 'mps'):
+#         super().__init__()
+#         # meta information
+#         self.device = device
+#         self.input_size = input_size
+#         self.hidden_size_1 = hidden_size_1
+#         # self.hidden_size_2 = hidden_size_2
+#         self.encoding_size = encoding_size
+#         self.random_init = random_init
+#         self.with_bias = with_bias
+
+#         # layers
+#         self.GCN_1 = GCNConvCustom(input_dim=self.input_size, output_dim=self.hidden_size_1, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
+#         self.GCN_2 = GCNConvCustom(input_dim=self.hidden_size_1, output_dim=self.encoding_size, random_init=self.random_init, with_bias=self.with_bias, device=self.device)
+#         # self.FC = nn.Linear(in_features=self.hidden_size_2, out_features=self.encoding_size, device=self.device)
+#         # activations
+#         self.relu = nn.ReLU()
+#         self.softmax = nn.Softmax()
+    #     self.sigmoid = nn.Sigmoid()
+
+    # def encoder(self, X, edge_list):
+    #     X_hat = self.GCN_1(X, edge_list) # first layer: lower dimension feature matrix
+    #     X_hat = self.relu(X_hat)
+    #     H = self.GCN_2(X_hat, edge_list) # second layer: mean matrix
+    #     Z = self.relu(H)
+    #     return Z
+
+    # def decoder(self, Z, adj_matrix=False):
+    #     Y_inner = torch.mm(Z, Z.T)
+    #     Y = self.sigmoid(Y_inner) # apply activation
+    #     if not adj_matrix:
+    #         return gutils.dense_to_sparse(Y)[0]
+    #     return Y
+
+    # def decode(self, z):
+    #     return self.sigmoid(z.T @ z)
+
+    # def forward(self, X, edge_list, adj_matrix=False):
+    #     Z = self.encoder(X, edge_list)
+    #     output = self.decoder(Z, adj_matrix=adj_matrix)
+    #     return output
 
 class GCNEncoder(torch.nn.Module):
     def __init__(self, in_channels, out_channels):

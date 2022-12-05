@@ -89,10 +89,6 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
         print("Model Initialized!")
     elif task == 'edgeprediction':
         print('Start Edge Prediction Task (Model: GCN-AE)')
-        # model = GCN_AE(input_size=train_data.x.shape[1], hidden_size_1=hidden_size, hidden_size_2=(hidden_size+encode_size)//2, encoding_size=encode_size, device=device)
-        # optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
-        # criterion = nn.CrossEntropyLoss() # Custom Loss
-        # parameters
         out_channels = 2
         num_features = data.x.shape[1]
         epochs = 100
@@ -151,8 +147,6 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             return model.test(z, pos_edge_index, neg_edge_index)
 
 
-        # train_target_adj = (gutils.to_dense_adj(train_data.pos_edge_label_index, max_num_nodes=len(train_data.x))[0]).reshape(-1)
-        # val_target_adj = (gutils.to_dense_adj(val_data.pos_edge_label_index, max_num_nodes=len(val_data.x))[0]).reshape(-1)
         train_loss, val_loss, val_acc = [], [], []
         with tqdm.tqdm(range(epochs), unit="epochs") as tepoch:
             for epoch in tepoch:
@@ -175,12 +169,6 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             acc = int(correct) / int(test_mask.sum())
             print(f'Test Accuracy: {acc:.4f}')
         elif task == 'edgeprediction':
-            # pred = model(test_data.x, test_data.edge_index, adj_matrix=True)
-            # target = (gutils.to_dense_adj(test_data.pos_edge_label_index, max_num_nodes=len(test_data.x))[0]).reshape(-1)
-            # print(pred.sum())
-            # print(target.sum())
-            # acc = (pred == target).float().mean()  # correct edges / total edges
-            # print(f'Test Accuracy: {acc:.4f}')
             tacc, tau = test(data.test_pos_edge_index, data.test_neg_edge_index)
             print(f'Test Accuracy: ', tacc)
 
