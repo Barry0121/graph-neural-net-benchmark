@@ -27,7 +27,7 @@ import torch_geometric.transforms as T
 
 def loader_cora_torch(filepath="../data/raw/Planetoid",
                         num_train_per_class=20, num_val=500, num_test=1000, transform=None,
-                        device='cuda:0' if torch.cuda.is_available() else 'mps'):
+                        device='cuda:0' if torch.cuda.is_available() else 'cpu'):
     """Return the CORA dataset"""
     dataset = Planetoid(root=filepath, name='Cora', split='public',
                         num_train_per_class=num_train_per_class, num_val=num_val, num_test=num_test,
@@ -43,12 +43,11 @@ def loader_cora_torch(filepath="../data/raw/Planetoid",
     print(f'Has isolated nodes: {data.has_isolated_nodes()}')
     print(f'Has self-loops: {data.has_self_loops()}')
     print(f'Is undirected: {data.is_undirected()}')
-
     return data
 
 def loader_pubmed_torch(filepath="../data/raw/Planetoid",
                         num_train_per_class=20, num_val=500, num_test=1000, transform=T.ToSparseTensor(),
-                        device='cuda:0' if torch.cuda.is_available() else 'mps'):
+                        device='cuda:0' if torch.cuda.is_available() else 'cpu'):
     """Return the PubMed dataset"""
     dataset = Planetoid(root=filepath, name='PubMed', split='public',
                         num_train_per_class=num_train_per_class, num_val=num_val, num_test=num_test,
@@ -68,7 +67,7 @@ def loader_pubmed_torch(filepath="../data/raw/Planetoid",
 
 def loader_citeseer_torch(filepath="../data/raw/Planetoid",
                         num_train_per_class=20, num_val=500, num_test=1000, transform=None,
-                        device='cuda:0' if torch.cuda.is_available() else 'mps'):
+                        device='cuda:0' if torch.cuda.is_available() else 'cpu'):
     """Return the CiteSeer dataset"""
     dataset = Planetoid(root=filepath, name='CiteSeer', split='public',
                         num_train_per_class=num_train_per_class, num_val=num_val, num_test=num_test,
@@ -85,15 +84,3 @@ def loader_citeseer_torch(filepath="../data/raw/Planetoid",
     print(f'Has self-loops: {data.has_self_loops()}')
     print(f'Is undirected: {data.is_undirected()}')
     return data
-
-# class EncodingLoss(nn.Module):
-#     def __init__(self):
-#         super(EncodingLoss, self).__init__()
-
-#     def forward(self, node_embeddings, target_edge_list):
-#         loss = 0
-#         for i in range(target_edge_list.shape[1]):
-#             edge1, edge2 = target_edge_list[:, i]
-#             link = torch.sigmoid(node_embeddings[edge1].T @ node_embeddings[edge2])
-#             loss += 1 if link < 0.5 else 0
-#         return torch.tensor(loss)
