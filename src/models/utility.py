@@ -1,10 +1,9 @@
 #####################################################################################
-# Model Utility Module                                                              #
+# Utility Module                                                                    #
 #                                                                                   #
 # Description:                                                                      #
-# This module generalize dataloading, training, validation, and testing process,    #
-# model saving and loading procedure, and table and graph generation for all        #
-# types of pytorch models.                                                          #
+# This module generalize data loading, model saving and loading procedure, and table #
+# and graph generation for all types of pytorch models.                             #
 #                                                                                   #
 # Code References:                                                                  #
 # 1. https://pytorch-geometric.readthedocs.io/en/latest/notes/introduction.html     #
