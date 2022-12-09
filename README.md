@@ -18,3 +18,9 @@ Other options:
 2. `--hidden_size`: change the first layer hidden layer size.
 3. `--encode_size`: change the encoding size/final hidden layer size.
 4. `--train`/`--validation`/`--test`: specify number of training sample per classes, validation size, and testing data size.
+
+## Note on installing `pytorch_geometric`
+* Normally, the command: `conda install -c pyg pyg` will work on MacOS, Windows, and any Linux distro with anaconda/miniconda installed.
+* There are two known cases where this wouldn't work:
+1. If the pytorch isn't installed, or the installed version in the environment is <1.12.x, y9ou might need to look into alternative installation method (ex: building from source, use pip, etc).
+2. The newest MacOS Ventura (v13.0.1) has installation issue, due to the lack of support for M1 Macbooks (pytorch scatter doesn't support 'mps' device yet). One way to get around this issue is to follow this post: https://github.com/rusty1s/pytorch_scatter/issues/241. 
