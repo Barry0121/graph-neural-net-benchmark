@@ -11,61 +11,95 @@
 
 # Standard pacakges
 import torch
-from torch import nn, utils
-import networkx as nx
-import numpy as np
-import matplotlib.pyplot as plt
+from torch.nn import Linear, Parameter, Sequential, ReLU
 
 # Pytroch Geometric
-from torch_geometric import utils as gutils
-from torch_geometric import nn as gnn # import layers
-from torch_geometric.datasets import Planetoid # import dataset CORA
+from torch_geometric.nn import MessagePassing
+from torch_geometric.utils import add_self_loops, degree
 
 """
 Graph Convolution Layer with MessagePassing
+Source with explanation:
+    https://zqfang.github.io/2021-08-07-graph-pyg/
+    https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html#the-messagepassing-base-class
 """
-class GCNConvCustom(nn.Module):
+class GCNConv(MessagePassing):
     def __init__(self,
                 input_dim,
                 output_dim,
-                scale=1,
-                random_init=True,
-                with_bias=True,
-                device='cuda:0' if torch.cuda.is_available() else 'mps'):
-        super(GCNConvCustom, self).__init__()
+                device='cuda:0' if torch.cuda.is_available() else 'cpu'):
+        super(GCNConv, self).__init__(aggr='add')
 
-        """Metadata"""
+        """
+        Parameters:
+            input_dim: int, size of the input node features.
+            output_dim: int, size of the output node feature encodings.
+        """
         self.device = device # initialize the hosting device
-        self.with_bias = with_bias
-        self.scale = scale
-        self.random_init = random_init
+        self.linear = Linear(input_dim, output_dim, device=self.device, bias=False)
+        self.bias = Parameter(torch.Tensor(output_dim))
+        self.reset_parameters()
 
-        # initialize learnable weights
-        # the weight should have shape of (N , F) where N is the size of the input, and F is the output dimension
-        self.W, self.b = None, None
-        if random_init:
+    def forward(self, X, edge_index):
+        """
+        x has shape [N, in_channels]
+        edge_index has shape [2, E]
+        """
+        # no need for the second edge_attribute list
+        edge_index, _ = add_self_loops(edge_index, num_nodes=X.size[0])
+        X = self.linear(X)
 
-            self.W = torch.nn.Parameter(
-                data=(2 * torch.rand(input_dim, output_dim, device=self.device)-1)*self.scale,
-                requires_grad=True
-            )
-            # create trainable a bias term for the layer
-            self.b = torch.nn.Parameter(
-                data=(2 * torch.rand(output_dim, 1, device=self.device)-1)*self.scale,
-                requires_grad=True
-            )
-        else:
-            self.W = torch.nn.Parameter(
-                data=torch.zeros(input_dim, output_dim, device=self.device),
-                requires_grad=True
-            )
-            self.b = torch.nn.Parameter(
-                data=torch.zeros(output_dim, 1, device=self.device),
-                requires_grad=True
-            )
+        # compute normalization
+        row, col = edge_index
+        deg = degree(col, X.size(0), dtype=X.dtype)
+        deg_inv_sqrt = deg.pow(-0.5)
+        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0 # eliminate 'inf' error
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
 
-    def forward(self, H, edge_list):
-       pass
+        output = self.propagate(edge_index=edge_index, size=None, x=X, norm=norm)
+        # note: 'size' is the inferred size of the adjacency matrix; this can be rectangular
+
+        output += self.bias
+        return output
+
+    def message(self, x_j, norm):
+        """
+        x_j has shape [E, out_channels]
+        """
+        return norm.view(-1, 1) * x_j
+
+    def reset_parameters(self):
+        """
+        Util function
+        """
+        self.lin.reset_parameters()
+        self.bias.data.zero_()
+
+
+class EdgeConv(MessagePassing):
+    """
+    Reference:
+        https://pytorch-geometric.readthedocs.io/en/latest/notes/create_gnn.html#implementing-the-edge-convolution
+    """
+    def __init__(self,
+                input_dim,
+                output_dim,
+                device='cuda:0' if torch.cuda.is_available() else 'cpu'):
+        super(EdgeConv).__init__(aggr='max')
+
+        self.device = device
+        self.mlp = Sequential(
+            Linear(2*input_dim, output_dim), # 2 times the input dimension because of concatenation
+            ReLU(),
+            Linear(output_dim, output_dim)
+        )
+
+    def forward(self, X, edge_index):
+        return self.propagate(edge_index, x=X)
+
+    def message(self, X_i, X_j):
+        tmp = torch.cat([X_i, X_j - X_i], dim=1)  # tmp has shape [E, 2 * in_channels]
+        return self.mlp(tmp)
 
 """
 Graph Convolution Layer without message passing mechanism
