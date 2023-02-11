@@ -22,15 +22,6 @@ class Inverter(nn.Module):
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
 
-        # discuss if we should store embedding for our datasets outside of the inverter scripts
-        # # initialize Graph2Vec model
-        # self.graph2vec = Graph2Vec(wl_iterations=2,
-        #                             attributed=False,
-        #                             dimensions=128,
-        #                             down_sampling=0.0001,
-        #                             workers=-1,
-        #                             epochs=10)
-
     def forward(self, embedding):
         """
         Parameter:
