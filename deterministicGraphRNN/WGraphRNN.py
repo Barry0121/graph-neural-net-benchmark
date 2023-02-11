@@ -1,7 +1,3 @@
-# computes Wasserstein distance for GraphRNN
-# Wasserstein distance is between distributions of univariate statistics of the generated graphs
-# and the true graphs
-
 # Outline:
 # 
 # 1. 
@@ -28,14 +24,14 @@ mone = one * -1
 noise = None # change its dimensions to those of outputs from inverter
 
 # declare discriminator, generator
-netD = None # discriminator network that plays the role of a 1-Lipschitz function
+netD = None # discriminator network that plays the role of a 1-Lipschitz function, is a NN
 netG = None # GraphRNN
 
 # declare optimizers
 optimizerD = optim.Adam(netD.parameters(), lr=opt.lrD, betas=opt.betasD)
 optimizerG = optim.Adam(netG.parameters(), lr=opt.lrG, betas=opt.betasG)
 
-# pulled from 156-212 in main.py of WGAN
+# pulled from 156-212 in main.py of WassersteinGAN
 gen_iterations = 0 # iterations of updates for netG
 for epoch in range(opt.epochs):
     data_iter = iter(dataloader)
