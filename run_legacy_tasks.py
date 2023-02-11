@@ -10,10 +10,10 @@ import torch_geometric.transforms as T
 from torch_geometric import nn as gnn
 
 # Import custom scripts
-from src.models.utility import *
-from src.models.layers import *
-from src.models.models import *
-from src.visualizations.viz_utility import *
+from legacy_code.models.utility import *
+from legacy_code.models.layers import *
+from legacy_code.models.models import *
+from legacy_code.visualizations.viz_utility import *
 
 print("Package Import Successful!")
 time.sleep(2)
@@ -40,7 +40,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     # Load CORA testing Data #
     ##########################
     if dataset == 'cora':
-        filepath = "./test/testdata/cora"
+        filepath = "./data/raw/cora"
         data = loader_cora_torch(filepath=filepath,
                             transform=None,
                             num_train_per_class=train_per_class,
@@ -49,7 +49,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                             device=device)
 
     elif dataset == 'citeseer':
-        filepath = "./test/testdata/citeseer"
+        filepath = "./data/raw/citeseer"
         data = loader_citeseer_torch(filepath=filepath,
                             transform=None,
                             num_train_per_class=train_per_class,
@@ -57,14 +57,17 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
                             num_test=testing,
                             device=device)
     else:
-        print("Dataset is not available. Pick one of the two: (1) Cora (2) CiteSeer")
+        filepath = "./data/raw/pubmed"
+        data = loader_pubmed_torch(filepath=filepath,
+                            transform=None,
+                            num_train_per_class=train_per_class,
+                            num_val=validation,
+                            num_test=testing,
+                            device=device)
 
 
     if task == 'edgeprediction':
         print('Split data for edge  prediction task')
-        # transform = T.RandomLinkSplit(num_val=0.05, num_test=0.1, is_undirected=True,
-        #                             split_labels=True, add_negative_train_samples=False)
-        # train_data, val_data, test_data = transform(data)
         data.train_mask = data.val_mask = data.test_mask = None
         data = gutils.train_test_split_edges(data)
 
@@ -73,7 +76,7 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
         edge_index, node_features, labels, train_mask, val_mask, test_mask = \
             data.edge_index, data.x, data.y, data.train_mask, data.val_mask, data.test_mask
 
-    print("Data loaded in 'test/testdata' directory! ")
+    print(f"Data loaded in '{filepath}' directory! ")
     time.sleep(2)
 
 
@@ -89,10 +92,6 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
         print("Model Initialized!")
     elif task == 'edgeprediction':
         print('Start Edge Prediction Task (Model: GCN-AE)')
-        # model = GCN_AE(input_size=train_data.x.shape[1], hidden_size_1=hidden_size, hidden_size_2=(hidden_size+encode_size)//2, encoding_size=encode_size, device=device)
-        # optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
-        # criterion = nn.CrossEntropyLoss() # Custom Loss
-        # parameters
         out_channels = 2
         num_features = data.x.shape[1]
         epochs = 100
@@ -116,9 +115,9 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
     if task == 'nodeclassification':
         train_loss, val_loss, val_acc = [], [], []
         with tqdm.tqdm(range(epochs), unit="epochs") as tepoch:
-            for epoch in range(tepoch):
+            for epoch in (tepoch):
                 optimizer.zero_grad()
-                out = model(node_features, edge_index, adj_matrix=False)
+                out = model(node_features, edge_index)
                 loss = criterion(out[train_mask], labels[train_mask])
                 loss.backward()
                 optimizer.step()
@@ -151,37 +150,15 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             return model.test(z, pos_edge_index, neg_edge_index)
 
 
-        # train_target_adj = (gutils.to_dense_adj(train_data.pos_edge_label_index, max_num_nodes=len(train_data.x))[0]).reshape(-1)
-        # val_target_adj = (gutils.to_dense_adj(val_data.pos_edge_label_index, max_num_nodes=len(val_data.x))[0]).reshape(-1)
         train_loss, val_loss, val_acc = [], [], []
         with tqdm.tqdm(range(epochs), unit="epochs") as tepoch:
             for epoch in tepoch:
                 loss = train()
                 vauc, vap = test(data.val_pos_edge_index, data.val_neg_edge_index)
+
                 train_loss.append(loss)
                 val_loss.append(vap)
                 val_acc.append(vauc)
-                # # train
-                # optimizer.zero_grad()
-                # output = model(train_data.x, train_data.edge_index) # Note: output is each node's encoding [# of nodes, encode_size]
-                # # output_edge_list = match_edge_list(output.float(), train_data.pos_edge_label_index)
-                # loss = criterion(output.reshape(-1).float(), train_target_adj)
-                # loss.backward()
-                # optimizer.step()
-                # # print(output)
-                # # break
-
-                # # calculate accuracy
-                # with torch.no_grad():
-                #     output = model(val_data.x, val_data.edge_index, adj_matrix=True)
-                #     vloss = criterion(output.reshape(-1).float(), val_target_adj)
-                #     accuracy = torch.mean(output.reshape(-1).float() == val_target_adj, dtype=torch.float).item()
-
-                #     train_loss.append(loss)
-                #     val_loss.append(vloss)
-                #     val_acc.append(accuracy)
-
-
 
     print("Finish Training!")
     time.sleep(1)
@@ -196,21 +173,16 @@ def main(name="node-classification", dataset='cora', task='nodeclassification',
             acc = int(correct) / int(test_mask.sum())
             print(f'Test Accuracy: {acc:.4f}')
         elif task == 'edgeprediction':
-            # pred = model(test_data.x, test_data.edge_index, adj_matrix=True)
-            # target = (gutils.to_dense_adj(test_data.pos_edge_label_index, max_num_nodes=len(test_data.x))[0]).reshape(-1)
-            # print(pred.sum())
-            # print(target.sum())
-            # acc = (pred == target).float().mean()  # correct edges / total edges
-            # print(f'Test Accuracy: {acc:.4f}')
             tacc, tau = test(data.test_pos_edge_index, data.test_neg_edge_index)
             print(f'Test Accuracy: ', tacc)
 
     ####################
     # Save Loss Curves #
     ####################
-    # print("Saving visualizations...")
+    print("Saving visualizations...")
 
     # save_result(os.path.join('test', 'testresults'), name, train_loss, val_loss, val_acc)
+    save_result(os.path.join('src', 'visualizations'), name, train_loss, val_loss, val_acc)
 
 
 #############################
