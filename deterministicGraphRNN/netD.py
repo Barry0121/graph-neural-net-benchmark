@@ -35,6 +35,7 @@ class netD(nn.Module):
         super(netD, self).__init__()
         self.stat_input_dim = stat_input_dim
         self.stat_hidden_dim = stat_hidden_dim
+        self.num_stat = num_stat
 
         self.stat_NNs = [
             SimpleNN(self.stat_input_dim, self.stat_hidden_dim)
