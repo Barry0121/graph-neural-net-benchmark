@@ -65,6 +65,8 @@ class netD(nn.Module):
         degree_hist, _ = np.histogram( 
             np.array(nx.degree_histogram(G)),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
+        # print(type(degree_hist))
+        degree_hist = torch.from_numpy(degree_hist)
         degree_hist = self.stat_NNs[0](degree_hist)
 
         clustering_coefs, _ = np.histogram(
