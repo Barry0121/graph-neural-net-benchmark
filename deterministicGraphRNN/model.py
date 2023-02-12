@@ -102,14 +102,14 @@ def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
 
             # if random
             # y_result = Variable(torch.rand(y.size(0),y.size(1),y.size(2))).cuda()
-            
+
             for i in range(y_result.size(0)): # loop over all batches
                 for _ in range(sample_time): # do 'multi_sample' times sampling
                     # if deterministic
                     y_thresh = Variable(y.size(0),y.size(1),y.size(2)).cuda()
                     # if random
                     # y_thresh = Variable(torch.rand(y.size(1), y.size(2))).cuda()
-                    
+
                     y_result[i] = torch.gt(y[i], y_thresh).float()
                     if (torch.sum(y_result[i]).data > 0).any():
                         break
@@ -148,7 +148,7 @@ def sample_sigmoid_supervised(y_pred, y, current, y_len, sample_time=2):
     y_result = Variable(y_pred.size(0), y_pred.size(1), y_pred.size(2)).cuda()
     # if random
     # y_result = Variable(torch.rand(y_pred.size(0), y_pred.size(1), y_pred.size(2))).cuda() # do sampling
-    
+
     for i in range(y_result.size(0)): # loop over all batches
         if current<y_len[i]: # using supervision
             while True:
@@ -156,7 +156,7 @@ def sample_sigmoid_supervised(y_pred, y, current, y_len, sample_time=2):
                 y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
                 # if random
                 # y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-                
+
                 y_result[i] = torch.gt(y_pred[i], y_thresh).float()
                 y_diff = y_result[i].data - y[i]
                 if (y_diff >= 0).all():
@@ -168,7 +168,7 @@ def sample_sigmoid_supervised(y_pred, y, current, y_len, sample_time=2):
                 y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
                 # if random
                 # y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-                
+
                 y_result[i] = torch.gt(y_pred[i], y_thresh).float()
                 if (torch.sum(y_result[i]).data > 0).any():
                     break
@@ -188,10 +188,10 @@ def sample_sigmoid_supervised_simple(y_pred, y, current, y_len, sample_time=2):
 
     y_pred = F.sigmoid(y_pred) # make y_pred into probabilities
     # if deterministic
-    y_result = Variable(y_pred.size(0), y_pred.size(1), y_pred.size(2)).cuda() 
+    y_result = Variable(y_pred.size(0), y_pred.size(1), y_pred.size(2)).cuda()
     # if random
     # y_result = Variable(torch.rand(y_pred.size(0), y_pred.size(1), y_pred.size(2))).cuda()
-    
+
     for i in range(y_result.size(0)): # loop over all batches
         if current < y_len[i]: # using supervision
             y_result[i] = y[i]
@@ -201,7 +201,7 @@ def sample_sigmoid_supervised_simple(y_pred, y, current, y_len, sample_time=2):
                 y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
                 # if random
                 y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-                
+
                 y_result[i] = torch.gt(y_pred[i], y_thresh).float()
                 if (torch.sum(y_result[i]).data > 0).any():
                     break

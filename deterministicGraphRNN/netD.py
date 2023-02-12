@@ -35,6 +35,7 @@ class netD(nn.Module):
         super(netD, self).__init__()
         self.stat_input_dim = stat_input_dim
         self.stat_hidden_dim = stat_hidden_dim
+        self.num_stat = num_stat
 
         self.stat_NNs = [
             SimpleNN(self.stat_input_dim, self.stat_hidden_dim)
@@ -90,6 +91,7 @@ class SimpleNN(nn.Module):
         param input_dim: the size of the aforementioned vector
         param hidden_dim: the size of the hidden-layer's 
         """
+        super(SimpleNN, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.reduce = nn.Sequential(
