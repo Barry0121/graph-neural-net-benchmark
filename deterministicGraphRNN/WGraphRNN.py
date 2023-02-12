@@ -1,9 +1,9 @@
+import torch
+import torch.optim as optim
+
 # Outline:
 # 
 # 1. 
-
-import torch
-import torch.optim as optim
 
 # some argument parser thing, should be replaced
 opt = None

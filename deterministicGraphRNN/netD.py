@@ -22,10 +22,15 @@ class netD(nn.Module):
     def __init__(self, stat_input_dim, stat_hidden_dim, num_stat):
         """
         The discriminator. It computes various statistics from its input, each of which is
-        processed by a SimpleNN, takes a weighted sum of the processed values, and outputs a scalar
-        in (-1,1). The hope is that true samples get mapped to values closer to 1, and that 
-        generated samples get mapped to values closer to -1. Of course, we want our generator to 
-        be able to fool the discriminator into outputting 1's for generated samples too.
+        processed by a SimpleNN, takes a weighted sum of the processed values, which can be, 
+        interpreted as taking into account each feature's importance, and outputs a scalar in 
+        (-1,1). The hope is that true samples get mapped to values closer to 1, and that generated
+        samples get mapped to values closer to -1. Of course, we want our generator to be able to 
+        fool the discriminator into outputting 1's for generated samples too.
+
+        The structure of netD may be strange, but it is equivalent to a fully connected network
+        whose weights between statistics are 0. I think this is a reasonable restriction because I 
+        do not expect interactions between the histograms of different statistics.
         """
         super(netD, self).__init__()
         self.stat_input_dim = stat_input_dim
@@ -52,7 +57,10 @@ class netD(nn.Module):
         # possible modifications:
         # 1) use torch.histogram instead of np.histogram?
         # 2) add lots more statistics, these probably aren't enough to characterize a graph
+        # 3) add entropy regularization to reduce the computational complexity?
+        #       https://alexhwilliams.info/itsneuronalblog/2020/10/09/optimal-transport/
 
+        # stat 0
         degree_hist, _ = np.histogram( 
             np.array(nx.degree_histogram(G)),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
@@ -63,8 +71,12 @@ class netD(nn.Module):
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
         clustering_coefs = self.statNNs[1](clustering_coefs)
 
+        # stat 1
         stats = torch.Tensor([degree_hist, clustering_coefs])
         out = self.combine(stats)
+
+        # stat 2??
+        # number of nodes, no NN needed
 
         return out
 
