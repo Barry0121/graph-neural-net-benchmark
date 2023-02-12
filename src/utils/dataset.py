@@ -31,15 +31,16 @@ def get_dataset(name, train_val_ratio=0.8, filepath="../data/TUDataset", seed=42
 
 def get_graph2vec(name, dataset_source="../data/TUDataset"):
     """Get the graph embedding"""
-    graphs = get_dataset(name, dataset_source)
+    dataset = TUDataset(root=dataset_source, name=name)
+    graphs = [to_networkx(data)  for data in dataset]
     print("======Generating Embedding======")
     start = time.time()
-    graph2vec = Graph2Vec(workers=-1)
+    graph2vec = Graph2Vec(dimensions=128, workers=-1)
     graph2vec.fit(graphs)
     print(f"======Embedding Created (used {(time.time()-start) % 60} sec)======")
     return graph2vec
 
-# =========From GraphRNN==================
+# =========From GraphRNN: load data for training==================
 
 def encode_adj(adj, max_prev_node=10, is_full = False):
     '''
@@ -123,4 +124,3 @@ def get_dataloader(dataset, batch_size=32, num_workers=0):
     """Return dataloader for training"""
     sample_strategy = torch.utils.data.sampler.WeightedRandomSampler([1.0 / len(dataset) for i in range(len(dataset))], num_samples=batch_size**2, replacement=True)
     return torch.utils.data.DataLoader(get_sequence_sampler_dataset(dataset), batch_size=batch_size, num_workers=num_workers, sampler=sample_strategy)
-
