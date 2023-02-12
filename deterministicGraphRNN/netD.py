@@ -90,6 +90,7 @@ class SimpleNN(nn.Module):
         param input_dim: the size of the aforementioned vector
         param hidden_dim: the size of the hidden-layer's 
         """
+        super(SimpleNN, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.reduce = nn.Sequential(
