@@ -2,11 +2,11 @@ import torch
 import torch.optim as optim
 
 # Outline:
-# 
-# 1. 
+#
+# 1.
 
 # some argument parser thing, should be replaced
-opt = None
+opt = {}
 opt.epochs = 0
 opt.batch_size = 0
 opt.clamp_lower, opt.clamp_upper = -0.01, 0.01 # weight clippers
@@ -56,13 +56,13 @@ for epoch in range(opt.epochs):
             netD.zero_grad()
 
             # train with real
-            input = data.copy() 
-                # insert data processing 
+            input = data.copy()
+                # insert data processing
             errD_real = netD(input)
             errD_real.backward(one) # discriminator should assign 1's to true samples
 
             # train with fake
-            input = noise.resize_(opt.batch_size, 1).normal_(0, 1) 
+            input = noise.resize_(opt.batch_size, 1).normal_(0, 1)
                 # insert data processing
             fake = netG(input)
             errD_fake = netD(fake)
@@ -80,15 +80,15 @@ for epoch in range(opt.epochs):
             p.requires_grad = False # to avoid computation
         netG.zero_grad()
 
-        input = noise.resize_(opt.batch_size, 1).normal_(0, 1) 
+        input = noise.resize_(opt.batch_size, 1).normal_(0, 1)
             # insert data processing
         fake = netG(input)
         errG = netD(fake) # <- critic's opinion; output of solution f as in WGAN Theorem 3
-        
+
         # update netG parameters
         errG.backward(one)
         optimizerG.step()
-        
+
         gen_iterations += 1
 
         # maybe insert some statistics to print during training
