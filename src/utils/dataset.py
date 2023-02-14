@@ -44,6 +44,7 @@ def get_graph2vec(name, dataset_source="../data/TUDataset"):
 
 def encode_adj(adj, max_prev_node=10, is_full = False):
     '''
+    From GraphRNN codebase
     :param adj: n*n, rows means time step, while columns are input dimension
     :param max_degree: we want to keep row number, but truncate column numbers
     :return:
@@ -71,6 +72,7 @@ def encode_adj(adj, max_prev_node=10, is_full = False):
 
 def decode_adj(adj_output):
     '''
+    From GraphRNN codebase
         recover to adj from adj_output
         note: here adj_output have shape (n-1)*m
     '''

@@ -35,10 +35,10 @@ class NetD(nn.Module):
         super(NetD, self).__init__()
         self.stat_input_dim = stat_input_dim
         self.stat_hidden_dim = stat_hidden_dim
-
+        self.num_stat = num_stat
         self.stat_NNs = [
             SimpleNN(self.stat_input_dim, self.stat_hidden_dim)
-            for _ in range(num_stat)
+            for _ in range(self.num_stat)
         ]
 
         self.combine = nn.Sequential(
