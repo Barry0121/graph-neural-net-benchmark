@@ -216,9 +216,9 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
             y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
             output_y = pack_padded_sequence(output_y,output_y_len,batch_first=True)
             output_y = pad_packed_sequence(output_y,batch_first=True)[0]
-            # use cross entropy loss
-            loss = binary_cross_entropy_weight(y_pred, output_y)
-            loss.backward()
+            # # use cross entropy loss
+            # loss = binary_cross_entropy_weight(y_pred, output_y) # TODO: connect the correct loss
+            # loss.backward()
 
 
             #=========== my code =======
