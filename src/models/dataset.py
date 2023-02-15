@@ -274,7 +274,6 @@ def decode_adj_flexible(adj_output):
 
     return adj_full
 
-# outdated
 class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  G_list, max_num_node=None
     def __init__(self, G_list, Label_list, args, max_num_node=None):
         self.adj_all = []
@@ -288,6 +287,9 @@ class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  
             args.max_num_node = self.n
         else:
             self.n = max_num_node
+        self.max_prev_node = max(self.calc_max_prev_node())
+        args.max_prev_node = self.max_prev_node
+
     def __len__(self):
         return len(self.adj_all)
     def __getitem__(self, idx):
@@ -305,6 +307,29 @@ class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
         return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
+
+    def calc_max_prev_node(self, iter=20000,topk=10):
+        max_prev_node = []
+        for i in range(iter):
+            if i % (iter / 5) == 0:
+                print('iter {} times'.format(i))
+            adj_idx = np.random.randint(len(self.adj_all))
+            adj_copy = self.adj_all[adj_idx].copy()
+            x_idx = np.random.permutation(adj_copy.shape[0])
+            adj_copy = adj_copy[np.ix_(x_idx, x_idx)]
+            # adj_copy_matrix = np.asmatrix(adj_copy)
+            # G = nx.from_numpy_matrix(adj_copy_matrix)
+            # # then do bfs in the permuted G
+            # start_idx = np.random.randint(adj_copy.shape[0])
+            # x_idx = np.array(bfs_seq(G, start_idx))
+            # adj_copy = adj_copy[np.ix_(x_idx, x_idx)]
+            # encode adj
+            adj_encoded = encode_adj(adj_copy.copy())
+            max_encoded_len = max([len(adj_encoded[i]) for i in range(len(adj_encoded))])
+            max_prev_node.append(max_encoded_len)
+        max_prev_node = sorted(max_prev_node)[-1*topk:]
+        return max_prev_node
+
 # outdated
 class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, max_num_node=None
     def __init__(self, G_list, Label_list,  max_num_node=None) -> None:
@@ -380,6 +405,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         # for small graph the rest are zero padded
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
+        # TODO: return original adj matrix
         return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
 
     def calc_max_prev_node(self, iter=20000,topk=10):
@@ -405,6 +431,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         max_prev_node = sorted(max_prev_node)[-1*topk:]
         return max_prev_node
 
+# outdated
 def get_dataloader_train(dataset, args, num_workers=0):
     """Return dataloader for training"""
     sample_strategy = torch.utils.data.sampler.WeightedRandomSampler([1.0 / len(dataset) for i in range(len(dataset))], num_samples=args.batch_size**2, replacement=True)
