@@ -1,15 +1,10 @@
-"""
-Implementation of the generator
-
-Author: Winston Yu
-"""
-
 from __future__ import unicode_literals, print_function, division
 from io import open
 import unicodedata
 import string
 import re
 import random
+import pickle
 
 import torch
 import torch.nn as nn
@@ -18,203 +13,16 @@ from torch import optim
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from torch.optim.lr_scheduler import MultiStepLR
 
 from collections import OrderedDict
 import math
 import numpy as np
-import time
+import time as tm
 
-def binary_cross_entropy_weight(y_pred, y,has_weight=False, weight_length=1, weight_max=10):
-    '''
+from .generator_utils import *
 
-    :param y_pred:
-    :param y:
-    :param weight_length: how long until the end of sequence shall we add weight
-    :param weight_value: the magnitude that the weight is enhanced
-    :return:
-    '''
-    if has_weight:
-        weight = torch.ones(y.size(0),y.size(1),y.size(2))
-        weight_linear = torch.arange(1,weight_length+1)/weight_length*weight_max
-        weight_linear = weight_linear.view(1,weight_length,1).repeat(y.size(0),1,y.size(2))
-        weight[:,-1*weight_length:,:] = weight_linear
-        loss = F.binary_cross_entropy(y_pred, y, weight=weight.cuda())
-    else:
-        loss = F.binary_cross_entropy(y_pred, y)
-    return loss
-
-def sample_tensor(y,sample=True, thresh=0.5):
-    # do sampling
-    if sample:
-        y_thresh = Variable(torch.rand(y.size())).cuda()
-        y_result = torch.gt(y,y_thresh).float()
-    # do max likelihood based on some threshold
-    else:
-        y_thresh = Variable(torch.ones(y.size())*thresh).cuda()
-        y_result = torch.gt(y, y_thresh).float()
-    return y_result
-
-def gumbel_softmax(logits, temperature, eps=1e-9):
-    '''
-
-    :param logits: shape: N*L
-    :param temperature:
-    :param eps:
-    :return:
-    '''
-    # get gumbel noise
-    noise = torch.rand(logits.size())
-    noise.add_(eps).log_().neg_()
-    noise.add_(eps).log_().neg_()
-    noise = Variable(noise).cuda()
-
-    x = (logits + noise) / temperature
-    x = F.softmax(x)
-    return x
-
-def gumbel_sigmoid(logits, temperature):
-    '''
-
-    :param logits:
-    :param temperature:
-    :param eps:
-    :return:
-    '''
-    # get gumbel noise
-    noise = torch.rand(logits.size()) # uniform(0,1)
-    noise_logistic = torch.log(noise)-torch.log(1-noise) # logistic(0,1)
-    noise = Variable(noise_logistic).cuda()
-
-    x = (logits + noise) / temperature
-    x = F.sigmoid(x)
-    return x
-
-# made deterministic
-def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
-    '''
-    do sampling over unnormalized score
-    :param y: input
-    :param sample: Bool
-    :param thresh: if not sample, the threshold
-    :param sample_time: how many times do we sample, if =1, do single sample
-    :return: sampled result
-    '''
-
-    y = F.sigmoid(y) # make y into probabilities
-    if sample: # do sampling
-        if sample_time>1:
-            # if deterministic
-            y_result = Variable(y.size(0),y.size(1),y.size(2)).cuda()
-
-            # if random
-            # y_result = Variable(torch.rand(y.size(0),y.size(1),y.size(2))).cuda()
-
-            for i in range(y_result.size(0)): # loop over all batches
-                for _ in range(sample_time): # do 'multi_sample' times sampling
-                    # if deterministic
-                    y_thresh = Variable(y.size(0),y.size(1),y.size(2)).cuda()
-                    # if random
-                    # y_thresh = Variable(torch.rand(y.size(1), y.size(2))).cuda()
-
-                    y_result[i] = torch.gt(y[i], y_thresh).float()
-                    if (torch.sum(y_result[i]).data > 0).any():
-                        break
-                    # else:
-                    #     print('all zero',j)
-        else:
-            # if deterministic
-            y_thresh = Variable(y.size(0),y.size(1),y.size(2)).cuda()
-            y_result = torch.gt(y,y_thresh).float()
-
-            # if random
-            # y_thresh = Variable(torch.rand(y.size(0),y.size(1),y.size(2))).cuda()
-            # y_result = torch.gt(y,y_thresh).float()
-
-    # do max likelihood based on some threshold
-    else:
-        y_thresh = Variable(torch.ones(y.size(0), y.size(1), y.size(2)) * thresh).cuda()
-        y_result = torch.gt(y, y_thresh).float()
-    return y_result
-
-# made deterministic
-def sample_sigmoid_supervised(y_pred, y, current, y_len, sample_time=2):
-    '''
-    do sampling over unnormalized score
-    :param y_pred: input
-    :param y: supervision
-    :param sample: Bool
-    :param thresh: if not sample, the threshold
-    :param sampe_time: how many times do we sample, if =1, do single sample
-    :return: sampled result
-    '''
-
-    y_pred = F.sigmoid(y_pred) # make y_pred into probabilities
-
-    # if deterministic
-    y_result = Variable(y_pred.size(0), y_pred.size(1), y_pred.size(2)).cuda()
-    # if random
-    # y_result = Variable(torch.rand(y_pred.size(0), y_pred.size(1), y_pred.size(2))).cuda() # do sampling
-
-    for i in range(y_result.size(0)): # loop over all batches
-        if current<y_len[i]: # using supervision
-            while True:
-                # if deterministic
-                y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
-                # if random
-                # y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-
-                y_result[i] = torch.gt(y_pred[i], y_thresh).float()
-                y_diff = y_result[i].data - y[i]
-                if (y_diff >= 0).all():
-                    break
-        else: # not using supervision
-            # do 'multi_sample' times sampling
-            for _ in range(sample_time):
-                # if deterministic
-                y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
-                # if random
-                # y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-
-                y_result[i] = torch.gt(y_pred[i], y_thresh).float()
-                if (torch.sum(y_result[i]).data > 0).any():
-                    break
-    return y_result
-
-# made deterministic
-def sample_sigmoid_supervised_simple(y_pred, y, current, y_len, sample_time=2):
-    '''
-    do sampling over unnormalized score
-    :param y_pred: input
-    :param y: supervision
-    :param sample: Bool
-    :param thresh: if not sample, the threshold
-    :param sampe_time: how many times do we sample, if =1, do single sample
-    :return: sampled result
-    '''
-
-    y_pred = F.sigmoid(y_pred) # make y_pred into probabilities
-    # if deterministic
-    y_result = Variable(y_pred.size(0), y_pred.size(1), y_pred.size(2)).cuda()
-    # if random
-    # y_result = Variable(torch.rand(y_pred.size(0), y_pred.size(1), y_pred.size(2))).cuda()
-
-    for i in range(y_result.size(0)): # loop over all batches
-        if current < y_len[i]: # using supervision
-            y_result[i] = y[i]
-        else: # supervision done
-            for _ in range(sample_time): # do 'multi_sample' times sampling
-                # if deterministic
-                y_thresh = Variable(y_pred.size(1), y_pred.size(2)).cuda()
-                # if random
-                y_thresh = Variable(torch.rand(y_pred.size(1), y_pred.size(2))).cuda()
-
-                y_result[i] = torch.gt(y_pred[i], y_thresh).float()
-                if (torch.sum(y_result[i]).data > 0).any():
-                    break
-    return y_result
-
-################### current adopted model, LSTM+MLP || LSTM+VAE || LSTM+LSTM (where LSTM can be GRU as well)
-#####
+################### current adopted model, LSTM+MLP || LSTM+VAE || LSTM+LSTM (where LSTM can be GRU as well) #####
 # definition of terms
 # h: hidden state of LSTM
 # y: edge prediction, model output
@@ -256,8 +64,8 @@ class LSTM_plain(nn.Module):
                 m.weight.data = init.xavier_uniform(m.weight.data, gain=nn.init.calculate_gain('relu'))
 
     def init_hidden(self, batch_size):
-        return (Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).cuda(),
-                Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).cuda())
+        return (Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).to(choose_device()),
+                Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).to(choose_device()))
 
     def forward(self, input_raw, pack=False, input_len=None):
         if self.has_input:
@@ -311,7 +119,7 @@ class GRU_plain(nn.Module):
                 m.weight.data = init.xavier_uniform(m.weight.data, gain=nn.init.calculate_gain('relu'))
 
     def init_hidden(self, batch_size):
-        return Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).cuda()
+        return Variable(torch.zeros(self.num_layers, batch_size, self.hidden_size)).to(choose_device())
 
     def forward(self, input_raw, pack=False, input_len=None):
         if self.has_input:
@@ -392,7 +200,7 @@ class MLP_VAE_plain(nn.Module):
         z_lsgms = self.encode_12(h)
         # reparameterize
         z_sgm = z_lsgms.mul(0.5).exp_()
-        eps = Variable(torch.randn(z_sgm.size())).cuda()
+        eps = Variable(torch.randn(z_sgm.size())).to(choose_device())
         z = eps*z_sgm + z_mu
         # decoder
         y = self.decode_1(z)
@@ -421,15 +229,13 @@ class MLP_VAE_conditional_plain(nn.Module):
         z_lsgms = self.encode_12(h)
         # reparameterize
         z_sgm = z_lsgms.mul(0.5).exp_()
-        eps = Variable(torch.randn(z_sgm.size(0), z_sgm.size(1), z_sgm.size(2))).cuda()
+        eps = Variable(torch.randn(z_sgm.size(0), z_sgm.size(1), z_sgm.size(2))).to(choose_device())
         z = eps * z_sgm + z_mu
         # decoder
         y = self.decode_1(torch.cat((h,z),dim=2))
         y = self.relu(y)
         y = self.decode_2(y)
         return y, z_mu, z_lsgms
-
-########### baseline model 1: Learning deep generative model of graphs
 
 class DGM_graphs(nn.Module):
     def __init__(self,h_size):
@@ -475,42 +281,108 @@ class DGM_graphs(nn.Module):
         ## 5 f_nodes
         self.f_s = nn.Linear(h_size*2, 1)
 
-def message_passing(node_neighbor, node_embedding, model):
-    node_embedding_new = []
-    for i in range(len(node_neighbor)):
-        neighbor_num = len(node_neighbor[i])
-        if neighbor_num > 0:
-            node_self = node_embedding[i].expand(neighbor_num, node_embedding[i].size(1))
-            node_self_neighbor = torch.cat([node_embedding[j] for j in node_neighbor[i]], dim=0)
-            message = torch.sum(model.m_uv_1(torch.cat((node_self, node_self_neighbor), dim=1)), dim=0, keepdim=True)
-            node_embedding_new.append(model.f_n_1(message, node_embedding[i]))
+#=======Final GraphRNN model========
+class GraphRNN(nn.Module):
+    def __init__(self, args, device=choose_device()) -> None:
+        super().__init__()
+        self.args = args
+        self.device = device
+        self.rnn = GRU_plain(input_size=self.args.max_prev_node, embedding_size=self.args.embedding_size_rnn,
+                        hidden_size=self.args.hidden_size_rnn, num_layers=self.args.num_layers, has_input=True,
+                        has_output=True, output_size=self.args.hidden_size_rnn_output).to(self.device)
+        self.output = GRU_plain(input_size=1, embedding_size=self.args.embedding_size_rnn_output,
+                            hidden_size=self.args.hidden_size_rnn_output, num_layers=self.args.num_layers, has_input=True,
+                            has_output=True, output_size=1).to(self.device)
+
+        # load data state
+        if args.load:
+            fname = args.model_save_path + args.fname + 'lstm_' + str(args.load_epoch) + '.dat'
+            self.rnn.load_state_dict(torch.load(fname))
+            fname = args.model_save_path + args.fname + 'output_' + str(args.load_epoch) + '.dat'
+            self.output.load_state_dict(torch.load(fname))
+
+            args.lr = 0.00001
+            epoch = args.load_epoch
+            print('model loaded!, lr: {}'.format(args.lr))
         else:
-            message_null = Variable(torch.zeros((node_embedding[i].size(0),node_embedding[i].size(1)*2))).cuda()
-            node_embedding_new.append(model.f_n_1(message_null, node_embedding[i]))
-    node_embedding = node_embedding_new
-    node_embedding_new = []
-    for i in range(len(node_neighbor)):
-        neighbor_num = len(node_neighbor[i])
-        if neighbor_num > 0:
-            node_self = node_embedding[i].expand(neighbor_num, node_embedding[i].size(1))
-            node_self_neighbor = torch.cat([node_embedding[j] for j in node_neighbor[i]], dim=0)
-            message = torch.sum(model.m_uv_1(torch.cat((node_self, node_self_neighbor), dim=1)), dim=0, keepdim=True)
-            node_embedding_new.append(model.f_n_1(message, node_embedding[i]))
-        else:
-            message_null = Variable(torch.zeros((node_embedding[i].size(0), node_embedding[i].size(1) * 2))).cuda()
-            node_embedding_new.append(model.f_n_1(message_null, node_embedding[i]))
-    return node_embedding_new
+            epoch = 1
 
-def calc_graph_embedding(node_embedding_cat, model):
-    node_embedding_graph = model.f_m(node_embedding_cat)
-    node_embedding_graph_gate = model.f_gate(node_embedding_cat)
-    graph_embedding = torch.sum(torch.mul(node_embedding_graph, node_embedding_graph_gate), dim=0, keepdim=True)
-    return graph_embedding
+    # ====Call these in training loop====
+    def init_optimizer(self):
+        """Initialize optimizers and schedular for both RNNs"""
+        self.optimizer_rnn = optim.Adam(list(self.rnn.parameters()), lr=self.args.lr)
+        self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=self.args.lr)
+        self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=self.args.milestones, gamma=self.args.lr_rate)
+        self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=self.args.milestones, gamma=self.args.lr_rate)
 
-def calc_init_embedding(node_embedding_cat, model):
-    node_embedding_init = model.f_m_init(node_embedding_cat)
-    node_embedding_init_gate = model.f_gate_init(node_embedding_cat)
-    init_embedding = torch.sum(torch.mul(node_embedding_init, node_embedding_init_gate), dim=0, keepdim=True)
-    init_embedding = model.f_init(init_embedding)
-    return init_embedding
+    def clear_gradient_models(self):
+        self.rnn.zero_grad()
+        self.output.zero_grad()
 
+    def clear_gradient_opts(self):
+        self.optimizer_rnn.zero_grad()
+        self.optimizer_output.zero_grad()
+
+    def all_steps(self):
+        self.optimizer_rnn.step()
+        self.optimizer_output.step()
+        self.scheduler_rnn.step()
+        self.scheduler_output.step()
+
+    # ======================================
+
+    def sort_data_per_epoch(self, X, Y, length):
+        x_unsorted = X.float()
+        y_unsorted = Y.float()
+        y_len_unsorted = length
+        y_len_max = max(y_len_unsorted)
+        x_unsorted = x_unsorted[:, 0:y_len_max, :]
+        y_unsorted = y_unsorted[:, 0:y_len_max, :]
+        y_len,sort_index = torch.sort(y_len_unsorted,0,descending=True)
+        y_len = y_len.numpy().tolist()
+        x = torch.index_select(x_unsorted,0,sort_index)
+        y = torch.index_select(y_unsorted,0,sort_index)
+        y_reshape = pack_padded_sequence(y,y_len,batch_first=True).data
+        idx = [i for i in range(y_reshape.size(0)-1, -1, -1)]
+        idx = torch.LongTensor(idx)
+        y_reshape = y_reshape.index_select(0, idx)
+        y_reshape = y_reshape.view(y_reshape.size(0),y_reshape.size(1),1)
+        output_x = torch.cat((torch.ones(y_reshape.size(0),1,1),y_reshape[:,0:-1,0:1]),dim=1)
+        output_y = y_reshape
+        output_y_len = []
+        output_y_len_bin = np.bincount(np.array(y_len))
+        for i in range(len(output_y_len_bin)-1,0,-1):
+            count_temp = np.sum(output_y_len_bin[i:]) # count how many y_len is above i
+            output_y_len.extend([min(i,y.size(2))]*count_temp) # put them in output_y_len; max value should not exceed y.size(2)
+
+        # pack into variable
+        x = Variable(x).to(self.device)
+        y = Variable(y).to(self.device)
+        output_x = Variable(output_x).to(self.device)
+        output_y = Variable(output_y).to(self.device)
+        batch_size = x_unsorted.size(0)
+        return x, y, output_x, output_y, y_len, output_y_len, batch_size
+
+    def forward(self, X, Y, length):
+        sorted_x, sorted_y, sorted_output_x, sorted_output_y, y_len, output_y_len, batch_size = self.sort_data_per_epoch(X, Y, length)
+        # init hidden for rnn
+        self.rnn.hidden = self.rnn.init_hidden(batch_size=batch_size)
+        # rnn pass
+        h = self.rnn(sorted_x, pack=True, input_len=y_len)
+        h = pack_padded_sequence(h, y_len, batch_first=True)
+        # reverse hidden
+        idx = [i for i in range(h.size(0) - 1, -1, -1)]
+        idx = Variable(torch.LongTensor(idx)).to(self.device)
+        h = h.index_select(0, idx)
+        hidden_null = Variable(torch.zeros(self.args.num_layers-1, h.size(0), h.size(1))).to(self.device)
+        # init hidden for output
+        self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
+        # output pass
+        y_pred = self.output(sorted_output_x, pack=True, input_len=output_y_len)
+        y_pred = F.sigmoid(y_pred)
+        # clean
+        y_pred = pack_padded_sequence(y_pred, output_y_len, batch_first=True)
+        y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
+        sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
+        sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
+        return y_pred, sorted_output_y
