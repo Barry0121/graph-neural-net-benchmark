@@ -61,12 +61,14 @@ class NetD(nn.Module):
         degree_hist, _ = np.histogram(
             np.array(nx.degree_histogram(G)),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
+        degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
         degree_hist = self.stat_NNs[0](degree_hist)
 
         clustering_coefs, _ = np.histogram(
             list(nx.clustering(G).values()),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
-        clustering_coefs = self.statNNs[1](clustering_coefs)
+        clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
+        clustering_coefs = self.stat_NNs[1](clustering_coefs)
 
         stats = torch.Tensor([degree_hist, clustering_coefs])
         out = self.combine(stats)

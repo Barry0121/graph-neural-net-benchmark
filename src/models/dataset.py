@@ -30,7 +30,7 @@ def get_dataset(name, filepath="../data/TUDataset", seed=42):
     """Return list of graphs"""
     # create graphs dataset
     dataset = TUDataset(root=filepath, name=name)
-    graphs = [to_networkx(data)  for data in dataset]
+    graphs = [to_networkx(data) for data in dataset]
     return graphs
 
 def get_dataset_with_label(name, filepath="../data/TUDataset", seed=42):
@@ -404,7 +404,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
 
 def get_dataloader_train(dataset, args, num_workers=0):
     """Return dataloader for training"""
-    sample_strategy = torch.utils.data.sampler.WeightedRandomSampler([1.0 / len(dataset) for i in range(len(dataset))], num_samples=batch_size**2, replacement=True)
+    sample_strategy = torch.utils.data.sampler.WeightedRandomSampler([1.0 / len(dataset) for i in range(len(dataset))], num_samples=args.batch_size**2, replacement=True)
     return torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=num_workers, sampler=sample_strategy)
 
 def get_dataloader_labels(dataset, args, num_workers=0):
