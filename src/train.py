@@ -7,7 +7,8 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 
-from utils.dataset import *
+from models.args import *
+from models.dataset import *
 from models.discriminator import *
 from models.generator import *
 from models.inverter import *
@@ -22,23 +23,17 @@ def choose_device():
         return 'cpu'
 
 
-def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+def train(dataset_name, noise_dim, args=args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
     # initialize noise, optimizer and loss
     I = Inverter(input_dim=512, output_dim=noise_dim, hidden_dim=256)
-    G = GraphRNN()
+    G = GraphRNN(args=args)
     D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
     graph2vec = get_graph2vec(dataset_name) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(i.parameters(), lr=lr).to(device)
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=betas).to(device)
-
-    # From GraphRNN
-    optimizerG_rnn = optim.Adam(list(G_rnn.parameters()), lr=lr, betas=betas)
-    optimizerG_output = optim.Adam(list(G_output.parameters()), lr=lr, betas=betas)
-    # scheduler_rnn = MultiStepLR(optimizer_rnn, milestones=args.milestones, gamma=args.lr_rate)
-    # scheduler_output = MultiStepLR(optimizer_output, milestones=args.milestones, gamma=args.lr_rate)
-
+    G.init_optimizer()
 
 
     noise = torch.randn(batch_size, noise_dim).to(device)
@@ -47,18 +42,20 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
 
 
     # get the dataset
-    train, val, test = get_dataset(dataset_name)
-    train_loader = get_dataloader(train, batch_size=64)
-    val_loader = get_dataloader(val, batch_size=64)
-    test_loader = get_dataloader(test, batch_size=64)
+    train = get_dataset(dataset_name) # entire dataset as train
+    train_dataset = Graph_sequence_sampler_pytorch_nobfs(train)
+    train_loader = get_dataloader_labels(train_dataset)
 
     start_time = time.time()
     for e in epochs:
         # for now, treat the input as adj matrices
+
         for i, data in enumerate(train_loader):
             X = data['x']
             Y = data['y']
+            label = data['label']
             Y_len = data['len']
+
             start=time.time()
             print("====Start Training Discriminator====")
 
@@ -94,24 +91,28 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
 
             print(f"====Finished in {(time.time()-start)%60} sec====")
 
-            print("====Start Training Inverter====")
+            print("====Start Training Inverter and Generator====")
+            G.clear_gradient_opts()
+            G.clear_gradient_models()
+            I.zero_grad()
             istart = time.time()
             # graphs
             original_graph = Y
-            reconst_graph = G(I(original_graph), batch_index=i) # TODO: replace G_output with fused function
+            G_pred_graph = G(X=I(original_graph), Y=original_graph, length=Y_len)
+            reconst_graph = G_pred_graph[1]  # TODO: either 0 or 1
             # noise
-            reconst_noise = noise
-            reconst_noise = I(G(noise, batch_index=i))
-            # compute loss
+            G_pred_noise = G(X=noise, Y=orginal_graph, length=Y_len)
+            reconst_noise = I(G_pred_noise[0])
+            # compute loss and update inverter loss
             loss = lossI(original_graph, reconst_graph, noise, reconst_noise)
-            # reset gradients and backprop
             optimizerI.zero_grad()
             loss.backward()
             optimizerI.step()
+            # compute loss and update generator loss
+            errG = D(reconst_graph) # TODO: what should this loss be exactly? We have the label and should we check if label is predicted correctly here? I guess what I am asking is which function to use to calculate the loss of fake vs real
+            errG.backward()
+            G.all_steps()
             print(f"====Finished in {(time.time()-istart)%60} sec====")
-
-            print("====Start Training Generator====")
-            # TODO: add loss functions for G and update optimizer
 
 
         # Print out training information.
@@ -124,4 +125,5 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
 
 name = 'MUTAG'
 noise_dim = 8
+args = Args()
 train(name, noise_dim)

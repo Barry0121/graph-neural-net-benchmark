@@ -23,7 +23,7 @@ class Args():
         # self.graph_type = 'caveman_small'
         # self.graph_type = 'caveman_small_single'
         # self.graph_type = 'community4'
-        self.graph_type = 'grid'
+        # self.graph_type = 'grid'
         # self.graph_type = 'grid_small'
         # self.graph_type = 'ladder_small'
 
@@ -39,6 +39,11 @@ class Args():
         #
         # if self.graph_type == 'barabasi_noise':
         #     self.graph_type = self.graph_type+str(self.noise)
+
+        # dataset names
+        self.graph_type = 'PROTEINS'
+        # self.graph_type = 'ENZYMES'
+        # self.graph_type = 'MUTAG'
 
         # if none, then auto calculate
         self.max_num_node = None # max number of nodes in a graph
@@ -62,7 +67,7 @@ class Args():
         self.num_layers = 4
 
         ### training config
-        self.num_workers = 4 # num workers to load data, default 4
+        self.num_workers = 0 # num workers to load data, default 4
         self.batch_ratio = 32 # how many batches of samples per epoch, default 32, e.g., 1 epoch = 32 batches
         self.epochs = 3000 # now one epoch means self.batch_ratio x batch_size
         self.epochs_test_start = 100
@@ -78,7 +83,7 @@ class Args():
 
         ### output config
         # self.dir_input = "/dfs/scratch0/jiaxuany0/"
-        self.dir_input = "./"
+        self.dir_input = "../cache/graphRNN/"
         self.model_save_path = self.dir_input+'model_save/' # only for nll evaluation
         self.graph_save_path = self.dir_input+'graphs/'
         self.figure_save_path = self.dir_input+'figures/'
