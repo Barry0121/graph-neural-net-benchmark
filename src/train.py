@@ -36,7 +36,6 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
 
     graph2vec = get_graph2vec(dataset_name) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(I.parameters(), lr=lr)
-<<<<<<< HEAD
     lossI = WGAN_ReconLoss(lamb, loss_func)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
 
@@ -46,11 +45,9 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
     # scheduler_rnn = MultiStepLR(optimizer_rnn, milestones=args.milestones, gamma=args.lr_rate)
     # scheduler_output = MultiStepLR(optimizer_output, milestones=args.milestones, gamma=args.lr_rate)
 
-=======
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
     optimizerD = optim.Adam(D.parameters(), lr=lr)
     G.init_optimizer()
->>>>>>> b52ad7d965ce428d9f54a857cbaf0c2f296925bb
 
 
     noise = torch.randn(batch_size, noise_dim).to(device)
