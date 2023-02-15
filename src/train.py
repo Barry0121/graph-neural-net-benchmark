@@ -67,9 +67,9 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
     D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
     graph2vec = get_graph2vec(dataset_name) # use infer() to generate new graph embedding
-    optimizerI = optim.Adam(i.parameters(), lr=lr).to(device)
-    lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
-    optimizerD = optim.Adam(D.parameters(), lr=lr, betas=betas).to(device)
+    optimizerI = optim.Adam(I.parameters(), lr=lr)
+    lossI = WGAN_ReconLoss(lamb, loss_func)
+    optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
 
     # From GraphRNN
     optimizerG_rnn = optim.Adam(list(G_rnn.parameters()), lr=lr, betas=betas)
@@ -104,7 +104,7 @@ def train(dataset_name, noise_dim, num_layers=4, clamp_lower=-0.01, clamp_upper=
             for p in D.parameters(): # reset requires_grad
                 p.requires_grad = True # they are set to False below in netG update
 
-            Diters = 0 # number of iterations to train discriminator
+            Diters = 10 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
                 j += 1
