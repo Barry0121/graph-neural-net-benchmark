@@ -23,28 +23,27 @@ def choose_device():
         return 'cpu'
 
 
-def train(dataset_name, noise_dim, args=args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+    # get the dataset
+    train, labels = get_dataset_with_label(dataset_name) # entire dataset as train
+    train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
+    train_loader = get_dataloader_labels(train_dataset, args)
+
     # initialize noise, optimizer and loss
     I = Inverter(input_dim=512, output_dim=noise_dim, hidden_dim=256)
     G = GraphRNN(args=args)
     D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
     graph2vec = get_graph2vec(dataset_name) # use infer() to generate new graph embedding
-    optimizerI = optim.Adam(i.parameters(), lr=lr).to(device)
+    optimizerI = optim.Adam(I.parameters(), lr=lr)
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
-    optimizerD = optim.Adam(D.parameters(), lr=lr, betas=betas).to(device)
+    optimizerD = optim.Adam(D.parameters(), lr=lr)
     G.init_optimizer()
 
 
     noise = torch.randn(batch_size, noise_dim).to(device)
     one = torch.FloatTensor([1])
     mone = one * -1
-
-
-    # get the dataset
-    train = get_dataset(dataset_name) # entire dataset as train
-    train_dataset = Graph_sequence_sampler_pytorch_nobfs(train)
-    train_loader = get_dataloader_labels(train_dataset)
 
     start_time = time.time()
     for e in epochs:
@@ -126,4 +125,4 @@ def train(dataset_name, noise_dim, args=args, num_layers=4, clamp_lower=-0.01, c
 name = 'MUTAG'
 noise_dim = 8
 args = Args()
-train(name, noise_dim)
+train(name, noise_dim, args=args)

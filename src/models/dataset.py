@@ -25,9 +25,6 @@ import logging
 import shutil
 import os
 
-from args import *
-
-args = Args()
 
 def get_dataset(name, filepath="../data/TUDataset", seed=42):
     """Return list of graphs"""
@@ -308,7 +305,7 @@ class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  
         return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
 
 class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, max_num_node=None
-    def __init__(self, G_list, Label_list, max_num_node=None) -> None:
+    def __init__(self, G_list, Label_list,  max_num_node=None) -> None:
         super().__init__()
         self.adj_all = []
         self.label_all = Label_list
@@ -331,9 +328,10 @@ class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, 
             return {'x':x_batch,'y':label_copy, 'len':len_batch}
 
 # nobfs sequence sometimes has error
-class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list, max_num_node=None, max_prev_node=None, iteration=20000
-    def __init__(self, G_list, max_num_node=None, max_prev_node=None, iteration=20000):
+class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=20000
+    def __init__(self, G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=20000):
         self.adj_all = []
+        self.label_all = Label_list
         self.len_all = []
         for G in G_list:
             self.adj_all.append(np.asarray(nx.to_numpy_matrix(G)))
@@ -346,6 +344,8 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
             print('calculating max previous node, total iteration: {}'.format(iteration))
             self.max_prev_node = max(self.calc_max_prev_node(iter=iteration))
             print('max previous node: {}'.format(self.max_prev_node))
+            # update max_prev_node argument
+            args.max_prev_node = self.max_prev_node
         else:
             self.max_prev_node = max_prev_node
 
@@ -377,7 +377,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         # for small graph the rest are zero padded
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
-        return {'x':x_batch,'y':y_batch, 'len':len_batch}
+        return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
 
     def calc_max_prev_node(self, iter=20000,topk=10):
         max_prev_node = []
@@ -402,14 +402,14 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         max_prev_node = sorted(max_prev_node)[-1*topk:]
         return max_prev_node
 
-def get_dataloader_train(dataset, batch_size=args.batch_size, num_workers=args.num_workers):
+def get_dataloader_train(dataset, args, num_workers=0):
     """Return dataloader for training"""
     sample_strategy = torch.utils.data.sampler.WeightedRandomSampler([1.0 / len(dataset) for i in range(len(dataset))], num_samples=batch_size**2, replacement=True)
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, sampler=sample_strategy)
+    return torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=num_workers, sampler=sample_strategy)
 
-def get_dataloader_labels(dataset, batch_size=args.batch_size, num_workers=0):
+def get_dataloader_labels(dataset, args, num_workers=0):
     """Dataloader for generating adversary"""
-    return torch.utils.data.DataLoader(dataset,  batch_size=batch_size, num_workers=num_workers)
+    return torch.utils.data.DataLoader(dataset,  batch_size=args.batch_size, num_workers=num_workers)
 
 #========Test=========
 # dataset = Graph_sequence_sampler_pytorch_nobfs(get_dataset('MUTAG'))

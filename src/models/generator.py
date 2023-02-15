@@ -19,11 +19,8 @@ from collections import OrderedDict
 import math
 import numpy as np
 import time as tm
-from args import *
 
-from generator_utils import *
-
-args = Args() # import arguments
+from .generator_utils import *
 
 ################### current adopted model, LSTM+MLP || LSTM+VAE || LSTM+LSTM (where LSTM can be GRU as well) #####
 # definition of terms
@@ -286,7 +283,7 @@ class DGM_graphs(nn.Module):
 
 #=======Final GraphRNN model========
 class GraphRNN(nn.Module):
-    def __init__(self, args=args, device=choose_device()) -> None:
+    def __init__(self, args, device=choose_device()) -> None:
         super().__init__()
         self.args = args
         self.device = device
@@ -313,10 +310,10 @@ class GraphRNN(nn.Module):
     # ====Call these in training loop====
     def init_optimizer(self):
         """Initialize optimizers and schedular for both RNNs"""
-        self.optimizer_rnn = optim.Adam(list(self.rnn.parameters()), lr=args.lr)
-        self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=args.lr)
-        self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=args.milestones, gamma=args.lr_rate)
-        self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=args.milestones, gamma=args.lr_rate)
+        self.optimizer_rnn = optim.Adam(list(self.rnn.parameters()), lr=self.args.lr)
+        self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=self.args.lr)
+        self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=self.args.milestones, gamma=self.args.lr_rate)
+        self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=self.args.milestones, gamma=self.args.lr_rate)
 
     def clear_gradient_models(self):
         self.rnn.zero_grad()
@@ -377,7 +374,7 @@ class GraphRNN(nn.Module):
         idx = [i for i in range(h.size(0) - 1, -1, -1)]
         idx = Variable(torch.LongTensor(idx)).to(self.device)
         h = h.index_select(0, idx)
-        hidden_null = Variable(torch.zeros(args.num_layers-1, h.size(0), h.size(1))).to(self.device)
+        hidden_null = Variable(torch.zeros(self.args.num_layers-1, h.size(0), h.size(1))).to(self.device)
         # init hidden for output
         self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
         # output pass
