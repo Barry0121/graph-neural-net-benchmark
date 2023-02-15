@@ -79,8 +79,8 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
 
                 # train with fake
                 input = noise.resize_(batch_size, 1).normal_(0, 1)
-                    # insert data processing
-                fake = D(input)
+                # insert data processing
+                fake = G(input)
                 errD_fake = D(fake)
                 errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
 

@@ -84,9 +84,9 @@ class WGAN_ReconLoss(nn.Module):
 
             return (log['gw_dist'] + (self.lamb * self.L(z_original, z_reconst)).to(self.device))
 
-def train(graphs_name, noise_dim, inverter, generator, epochs=10, lr=0.01, batch_size=1, lamb=0.1, loss_func='MSE', device= choose_device()):
+def train(graphs_name, noise_dim, inverter, generator, epochs=10, lr=0.01, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
     # initialize noise, optimizer and loss
-    i_optimizer = optim.Adam(inverter.parameters(), lr=lr).to(device)
+    i_optimizer = optim.Adam(inverter.parameters(), lr=lr)
     i_criterion = WGAN_ReconLoss(lamb, loss_func).to(device)
     noise = torch.randn(batch_size, noise_dim).to(device)
     graphs = TUDataset(root='../data/raw/TUDataset', name=graphs_name)
