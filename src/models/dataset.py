@@ -274,8 +274,9 @@ def decode_adj_flexible(adj_output):
 
     return adj_full
 
+# outdated
 class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  G_list, max_num_node=None
-    def __init__(self, G_list, Label_list, max_num_node=None):
+    def __init__(self, G_list, Label_list, args, max_num_node=None):
         self.adj_all = []
         self.label_all = Label_list
         self.len_all = []
@@ -284,6 +285,7 @@ class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  
             self.len_all.append(G.number_of_nodes())
         if max_num_node is None:
             self.n = max(self.len_all)
+            args.max_num_node = self.n
         else:
             self.n = max_num_node
     def __len__(self):
@@ -303,7 +305,7 @@ class Graph_sequence_sampler_pytorch_nobfs(torch.utils.data.Dataset): # param:  
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
         return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
-
+# outdated
 class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, max_num_node=None
     def __init__(self, G_list, Label_list,  max_num_node=None) -> None:
         super().__init__()
@@ -338,6 +340,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
             self.len_all.append(G.number_of_nodes())
         if max_num_node is None:
             self.n = max(self.len_all)
+            args.max_num_node = self.n
         else:
             self.n = max_num_node
         if max_prev_node is None:

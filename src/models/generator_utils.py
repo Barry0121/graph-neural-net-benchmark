@@ -5,6 +5,7 @@ import string
 import re
 import random
 import pickle
+import networkx as nx
 
 import torch
 import torch.nn as nn

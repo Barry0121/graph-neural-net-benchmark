@@ -36,18 +36,9 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
 
     graph2vec = get_graph2vec(dataset_name) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(I.parameters(), lr=lr)
-    lossI = WGAN_ReconLoss(lamb, loss_func)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
-
-    # From GraphRNN
-    optimizerG_rnn = optim.Adam(list(G_rnn.parameters()), lr=lr, betas=betas)
-    optimizerG_output = optim.Adam(list(G_output.parameters()), lr=lr, betas=betas)
-    # scheduler_rnn = MultiStepLR(optimizer_rnn, milestones=args.milestones, gamma=args.lr_rate)
-    # scheduler_output = MultiStepLR(optimizer_output, milestones=args.milestones, gamma=args.lr_rate)
-
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
-    optimizerD = optim.Adam(D.parameters(), lr=lr)
-    G.init_optimizer()
+    G.init_optimizer() # initialize optimizers
 
 
     noise = torch.randn(batch_size, noise_dim).to(device)
@@ -100,6 +91,7 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
             print(f"====Finished in {(time.time()-start)%60} sec====")
 
             print("====Start Training Inverter and Generator====")
+            G.train()
             G.clear_gradient_opts()
             G.clear_gradient_models()
             I.zero_grad()
@@ -107,9 +99,9 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
             # graphs
             original_graph = Y
             G_pred_graph = G(X=I(original_graph), Y=original_graph, length=Y_len)
-            reconst_graph = G_pred_graph[1]  # TODO: either 0 or 1
+            reconst_graph = G_pred_graph[0]  # 0 for prediction, 1 for sorted output
             # noise
-            G_pred_noise = G(X=noise, Y=orginal_graph, length=Y_len)
+            G_pred_noise = G.generate(X=noise, test_batch_size=args.test_batch_size)
             reconst_noise = I(G_pred_noise[0])
             # compute loss and update inverter loss
             loss = lossI(original_graph, reconst_graph, noise, reconst_noise)
@@ -117,7 +109,7 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
             loss.backward()
             optimizerI.step()
             # compute loss and update generator loss
-            errG = D(reconst_graph) # TODO: what should this loss be exactly? We have the label and should we check if label is predicted correctly here? I guess what I am asking is which function to use to calculate the loss of fake vs real
+            errG = torch.mean(D(reconst_graph)) # TODO: what should this loss be exactly? We have the label and should we check if label is predicted correctly here? I guess what I am asking is which function to use to calculate the loss of fake vs real
             errG.backward()
             G.all_steps()
             print(f"====Finished in {(time.time()-istart)%60} sec====")

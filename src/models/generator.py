@@ -347,7 +347,7 @@ class GraphRNN(nn.Module):
         idx = torch.LongTensor(idx)
         y_reshape = y_reshape.index_select(0, idx)
         y_reshape = y_reshape.view(y_reshape.size(0),y_reshape.size(1),1)
-        output_x = torch.cat((torch.ones(y_reshape.size(0),1,1),y_reshape[:,0:-1,0:1]),dim=1)
+        output_x = torch.cat((torch.ones(y_reshape.size(0),1,1),y_reshape[:,0:-1,0:1]),dim=1) # x's shape is determined by y's shape
         output_y = y_reshape
         output_y_len = []
         output_y_len_bin = np.bincount(np.array(y_len))
@@ -386,3 +386,50 @@ class GraphRNN(nn.Module):
         sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
         sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
         return y_pred, sorted_output_y
+
+    def generate(self, X, args, test_batch_size=1):
+        """
+        X: noise/latent vector
+        args: arguments dictionary
+        test_batch_size: number of graphs you want to generate
+        """
+        # provide a option to change number of graphs generated
+        if test_batch_size is None:
+            test_batch_size = args.test_batch_size
+
+        self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
+
+        # TODO: change this part to noise vector might need resizing
+        y_pred_long = Variable(torch.zeros(test_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
+        y_pred_long = X # shape:(batch_size, noise_dim)
+        x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
+
+        # iterative graph generation
+        for i in range(args.max_num_node):
+            # for each node
+            # 1. we use rnn to create new node embedding
+            # 2. we use output to create new edges
+
+            # (1)
+            h = self.rnn(x_step)
+            hidden_null = Variable(torch.zeros(args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
+            x_step = Variable(torch.zeros(test_batch_size, 1, args.max_prev_node)).to(self.device)
+            output_x_step = Variable(torch.ones(test_batch_size, 1, 1)).to(self.device)
+            # (2)
+            self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
+            for j in range(min(args.max_prev_node,i+1)):
+                output_y_pred_step = self.output(output_x_step)
+                output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1)
+                x_step[:,:,j:j+1] = output_x_step
+                self.output.hidden = Variable(self.output.hidden.data).to(self.device)
+            y_pred_long[:, i:i + 1, :] = x_step
+            self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
+        y_pred_long_data = y_pred_long.data.long()
+
+        # collect the graphs
+        G_pred_list = []
+        for i in range(test_batch_size):
+            adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
+            G_pred = get_graph(adj_pred) # get a graph from zero-padded adj
+            G_pred_list.append(G_pred)
+        return G_pred_list
