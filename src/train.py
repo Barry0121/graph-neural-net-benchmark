@@ -23,11 +23,12 @@ def choose_device():
         return 'cpu'
 
 
-def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+def train(dataset_name, args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
     # get the dataset
     train, labels = get_dataset_with_label(dataset_name) # entire dataset as train
-    train_dataset = Graph_sequence_sampler_pytorch_nobfs(train, labels, args)
+    train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
     train_loader = get_dataloader_labels(train_dataset, args)
+    noise_dim = args.max_prev_node
 
     # initialize noise, optimizer and loss
     I = Inverter(input_dim=512, output_dim=noise_dim, hidden_dim=256)
@@ -52,6 +53,7 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
         for i, data in enumerate(train_loader):
             X = data['x']
             Y = data['y']
+            adj_mat = data['adj_mat']
             label = data['label']
             Y_len = data['len']
 
@@ -72,17 +74,15 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
                 D.zero_grad()
 
                 # train with real
-                inputs = torch.torch.empty_like(Y).copy_(Y)
-                print(Y[0].shape)
+                inputs = torch.torch.empty_like(adj_mat).copy_(adj_mat)
                 input_graphs = [nx.from_edgelist(i) for i in inputs.detach().numpy()]
-                print(input_graphs[0])
                 errD_real = D(input_graphs)
                 errD_real.backward(one) # discriminator should assign 1's to true samples
 
                 # train with fake
                 input = noise.resize_(batch_size, 1).normal_(0, 1)
                 # insert data processing
-                fake = G(input)
+                fake = G.generate(input, args, test_batch_size=args.batch_size)
                 errD_fake = D(fake)
                 errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
 
@@ -100,19 +100,20 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
             I.zero_grad()
             istart = time.time()
             # graphs
-            original_graph = Y
-            G_pred_graph = G(X=I(original_graph), Y=original_graph, length=Y_len)
-            reconst_graph = G_pred_graph[0]  # 0 for prediction, 1 for sorted output
+            original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
+            I_output = I(torch.reshape(original_graphs, (original_graphs.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
+            G_pred_graphs = G(X=I_output[:, 0, :], Y=Y, length=Y_len)
+            reconst_graphs = G_pred_graphs[0]  # 0 for prediction, 1 for sorted output
             # noise
-            G_pred_noise = G.generate(X=noise, test_batch_size=args.test_batch_size)
-            reconst_noise = I(G_pred_noise[0])
+            G_pred_noise = G.generate(X=noise, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
+            reconst_noise = I(G_pred_noise)
             # compute loss and update inverter loss
-            loss = lossI(original_graph, reconst_graph, noise, reconst_noise)
+            loss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
             optimizerI.zero_grad()
             loss.backward()
             optimizerI.step()
             # compute loss and update generator loss
-            errG = torch.mean(G(reconst_graph))
+            errG = torch.mean(G(reconst_graphs))
             errG.backward()
             G.all_steps()
             print(f"====Finished in {(time.time()-istart)%60} sec====")
@@ -127,12 +128,19 @@ def train(dataset_name, noise_dim, args, num_layers=4, clamp_lower=-0.01, clamp_
 
 
 name = 'MUTAG'
-noise_dim = 8 # TODO: change this
 args = Args()
-graphs, labels = get_dataset_with_label('MUTAG')
-dataset = Graph_sequence_sampler_pytorch_nobfs(graphs, labels, args=args)
-dataloader = get_dataloader_labels(dataset)
-data = iter(dataloader)
-print(next(data))
 
-# train(name, noise_dim, args=args)
+# ===============Test BFS DataLoader==================
+# graphs, labels = get_dataset_with_label('MUTAG')
+# dataset = Graph_sequence_sampler_pytorch(graphs, labels, args=args)
+# dataloader = get_dataloader_labels(dataset, args)
+# for i, data in enumerate(dataloader):
+#     print(i)
+#     print(data['x'].shape)
+#     print(data['y'].shape)
+#     print(data['adj_mat'].shape)
+#     print(data['label'].shape)
+#     print(data['len'].shape)
+#     break
+
+train(name, args=args)

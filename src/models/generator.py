@@ -401,8 +401,8 @@ class GraphRNN(nn.Module):
 
         # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(test_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
-        y_pred_long = X # shape:(batch_size, noise_dim)
-        x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
+        x_step = X.to(self.device) # shape:(batch_size, 1, args.max_prev_node)
+        # x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
 
         # iterative graph generation
         for i in range(args.max_num_node):
@@ -426,10 +426,17 @@ class GraphRNN(nn.Module):
             self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
 
-        # collect the graphs
-        G_pred_list = []
+        # TODO: check my work, I am commenting this part out because we don't want graph objects, we want adj_matrix
+        # # collect the graphs
+        # G_pred_list = []
+        # for i in range(test_batch_size):
+        #     adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
+        #     G_pred = get_graph(adj_pred) # get a graph from zero-padded adj
+        #     G_pred_list.append(G_pred)
+        # return G_pred_list
+
+        adj_pred_list = []
         for i in range(test_batch_size):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-            G_pred = get_graph(adj_pred) # get a graph from zero-padded adj
-            G_pred_list.append(G_pred)
-        return G_pred_list
+            adj_pred_list.append(adj_pred)
+        return adj_pred_list

@@ -387,6 +387,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         return len(self.adj_all)
     def __getitem__(self, idx):
         adj_copy = self.adj_all[idx].copy()
+
         x_batch = np.zeros((self.n, self.max_prev_node))  # here zeros are padded for small graph
         x_batch[0,:] = 1 # the first input token is all ones
         y_batch = np.zeros((self.n, self.max_prev_node))  # here zeros are padded for small graph
@@ -405,8 +406,7 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
         # for small graph the rest are zero padded
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
-        # TODO: return original adj matrix
-        return {'x':x_batch,'y':y_batch,'label':self.label_all[idx],'len':len_batch}
+        return {'x':x_batch,'y':y_batch, 'adj_mat':decode_adj(y_batch), 'label':self.label_all[idx],'len':len_batch}
 
     def calc_max_prev_node(self, iter=20000,topk=10):
         max_prev_node = []
@@ -440,12 +440,3 @@ def get_dataloader_train(dataset, args, num_workers=0):
 def get_dataloader_labels(dataset, args, num_workers=0):
     """Dataloader for generating adversary"""
     return torch.utils.data.DataLoader(dataset,  batch_size=args.batch_size, num_workers=num_workers)
-
-#========Test=========
-# dataset = Graph_sequence_sampler_pytorch_nobfs(get_dataset('MUTAG'))
-# dataloader = get_dataloader_train(dataset)
-# data = iter(dataloader)
-# print(next(data))
-
-# graphs, labels = get_dataset_with_label('MUTAG')
-# dataloader = get_dataloader_labels(Graph_with_labels(graphs, labels))
