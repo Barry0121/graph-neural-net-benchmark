@@ -88,6 +88,7 @@ class Args():
         self.graph_save_path = self.dir_input+'graphs/'
         self.figure_save_path = self.dir_input+'figures/'
         self.timing_save_path = self.dir_input+'timing/'
+        self.loss_path = self.dir_input+'loss/'
         self.figure_prediction_save_path = self.dir_input+'figures_prediction/'
         self.nll_save_path = self.dir_input+'nll/'
 

@@ -25,6 +25,7 @@ import logging
 import shutil
 import os
 
+from .args import *
 
 def get_dataset(name, filepath="../data/TUDataset", seed=42):
     """Return list of graphs"""
@@ -356,7 +357,7 @@ class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, 
 
 # nobfs sequence sometimes has error
 class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=20000
-    def __init__(self, G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=20000):
+    def __init__(self, G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=10000):
         self.adj_all = []
         self.label_all = Label_list
         self.len_all = []
@@ -440,3 +441,7 @@ def get_dataloader_train(dataset, args, num_workers=0):
 def get_dataloader_labels(dataset, args, num_workers=0):
     """Dataloader for generating adversary"""
     return torch.utils.data.DataLoader(dataset,  batch_size=args.batch_size, num_workers=num_workers)
+
+# args = Args()
+# dataset = get_dataset_with_label(args.graph_type)
+# get_dataloader_labels(dataset)

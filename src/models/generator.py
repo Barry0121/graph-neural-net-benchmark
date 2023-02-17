@@ -21,6 +21,7 @@ import numpy as np
 import time as tm
 
 from .generator_utils import *
+from .args import *
 
 ################### current adopted model, LSTM+MLP || LSTM+VAE || LSTM+LSTM (where LSTM can be GRU as well) #####
 # definition of terms
@@ -397,12 +398,13 @@ class GraphRNN(nn.Module):
         if test_batch_size is None:
             test_batch_size = args.test_batch_size
 
-        self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
+        # self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
+        self.rnn.hidden = X.to(self.device)
 
         # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(test_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
-        x_step = X.to(self.device) # shape:(batch_size, 1, args.max_prev_node)
-        # x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
+        # x_step = X.to(self.device) # shape:(batch_size, 1, args.max_prev_node)
+        x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
 
         # iterative graph generation
         for i in range(args.max_num_node):
@@ -440,3 +442,4 @@ class GraphRNN(nn.Module):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
             adj_pred_list.append(adj_pred)
         return adj_pred_list
+
