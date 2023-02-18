@@ -97,7 +97,7 @@ def gumbel_sigmoid(logits, temperature):
     return x
 
 # made deterministic
-def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
+def sample_sigmoid(y, sample, device, thresh=0.5, sample_time=2):
     '''
     do sampling over unnormalized score
     :param y: input
@@ -111,7 +111,7 @@ def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
     if sample: # do sampling
         if sample_time>1:
             # if deterministic
-            y_result = Variable(y.size(0),y.size(1),y.size(2)).to(choose_device())
+            y_result = Variable(y.size(0),y.size(1),y.size(2)).to(device)
 
             # if random
             # y_result = Variable(torch.rand(y.size(0),y.size(1),y.size(2))).to(choose_device())
@@ -119,7 +119,7 @@ def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
             for i in range(y_result.size(0)): # loop over all batches
                 for _ in range(sample_time): # do 'multi_sample' times sampling
                     # if deterministic
-                    y_thresh = Variable(y.size(0),y.size(1),y.size(2)).to(choose_device())
+                    y_thresh = Variable(y.size(0),y.size(1),y.size(2)).to(device)
                     # if random
                     # y_thresh = Variable(torch.rand(y.size(1), y.size(2))).to(choose_device())
 
@@ -130,7 +130,7 @@ def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
                     #     print('all zero',j)
         else:
             # if deterministic
-            y_thresh = Variable(y.size(0),y.size(1),y.size(2)).to(choose_device())
+            y_thresh = torch.Tensor(y.size(0),y.size(1),y.size(2)).to(device)
             y_result = torch.gt(y,y_thresh).float()
 
             # if random
@@ -139,7 +139,7 @@ def sample_sigmoid(y, sample, thresh=0.5, sample_time=2):
 
     # do max likelihood based on some threshold
     else:
-        y_thresh = Variable(torch.ones(y.size(0), y.size(1), y.size(2)) * thresh).to(choose_device())
+        y_thresh = Variable(torch.ones(y.size(0), y.size(1), y.size(2)) * thresh).to(device)
         y_result = torch.gt(y, y_thresh).float()
     return y_result
 

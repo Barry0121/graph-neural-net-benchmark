@@ -25,7 +25,7 @@ import logging
 import shutil
 import os
 
-from .args import *
+# from args import *
 
 def get_dataset(name, filepath="../data/TUDataset", seed=42):
     """Return list of graphs"""
@@ -357,7 +357,7 @@ class Graph_with_labels(torch.utils.data.Dataset): # param: G_list, Label_list, 
 
 # nobfs sequence sometimes has error
 class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=20000
-    def __init__(self, G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=10000):
+    def __init__(self, G_list, Label_list, args, max_num_node=None, max_prev_node=None, iteration=12000):
         self.adj_all = []
         self.label_all = Label_list
         self.len_all = []
@@ -426,9 +426,11 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
             x_idx = np.array(bfs_seq(G, start_idx))
             adj_copy = adj_copy[np.ix_(x_idx, x_idx)]
             # encode adj
-            adj_encoded = encode_adj_flexible(adj_copy.copy())
-            max_encoded_len = max([len(adj_encoded[i]) for i in range(len(adj_encoded))])
-            max_prev_node.append(max_encoded_len)
+            adj_encoded = encode_adj(adj_copy.copy())
+            # print(len(adj_encoded))
+            if len(adj_encoded) != 0:
+                max_encoded_len = max([len(adj_encoded[i]) for i in range(len(adj_encoded))])
+                max_prev_node.append(max_encoded_len)
         max_prev_node = sorted(max_prev_node)[-1*topk:]
         return max_prev_node
 

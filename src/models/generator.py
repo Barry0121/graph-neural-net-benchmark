@@ -399,6 +399,9 @@ class GraphRNN(nn.Module):
             test_batch_size = args.test_batch_size
 
         # self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
+        # print(self.rnn.hidden.shape)
+        # print(X.shape)
+        # return
         self.rnn.hidden = X.to(self.device)
 
         # TODO: change this part to noise vector might need resizing
@@ -421,7 +424,7 @@ class GraphRNN(nn.Module):
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
             for j in range(min(args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
-                output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1)
+                output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
                 self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step

@@ -44,8 +44,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
 
 
     noise = torch.randn(batch_size, noise_dim).to(device)
-    # one = torch.FloatTensor([1])
-    # mone = one * -1
+    one = torch.FloatTensor([1])
+    mone = one * -1
 
     start_time = time.time()
     for e in range(epochs):
@@ -76,16 +76,21 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
 
                 # train with real
                 inputs = torch.torch.empty_like(adj_mat).copy_(adj_mat)
-                input_graphs = [nx.from_edgelist(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
-                errD_real = torch.mean(D(input_graphs))
+                # print(inputs.shape)
+                input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
+                D_pred = torch.Tensor([D(graph) for graph in input_graphs])
+                errD_real = torch.mean(D_pred)
+                # print(errD_real)
                 # errD_real.backward(one) # discriminator should assign 1's to true samples
+                # errD_real.backward()
 
                 # train with fake
-                input = noise.resize_(batch_size, 1).normal_(0, 1)
+                input = noise.resize_(args.num_layers, args.batch_size, args.hidden_size_rnn).normal_(0, 1)
                 # insert data processing
                 fake = G.generate(input, args, test_batch_size=args.batch_size)
                 errD_fake = torch.mean(D(fake))
                 # errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
+                # errD_fake.backward()
 
                 # compute Wasserstein distance and update parameters
                 errD = errD_real - errD_fake
