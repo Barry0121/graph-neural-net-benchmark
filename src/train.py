@@ -23,27 +23,27 @@ def choose_device():
         return 'cpu'
 
 
-def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5,lamb=0.1, loss_func='MSE', device=choose_device()):
     # get the dataset
     train, labels = get_dataset_with_label(args.graph_type) # entire dataset as train
     train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
     train_loader = get_dataloader_labels(train_dataset, args)
-    noise_dim = args.max_prev_node
+    noise_dim = args.hidden_size_rnn
     print('noise dimension is: ', noise_dim)
 
     # initialize noise, optimizer and loss
-    I = Inverter(input_dim=128, output_dim=noise_dim, hidden_dim=64)
+    I = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     G = GraphRNN(args=args)
     D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
-    graph2vec = get_graph2vec(args.graph_type, dim=128) # use infer() to generate new graph embedding
+    graph2vec = get_graph2vec(args.graph_type, dim=512) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(I.parameters(), lr=lr)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
     G.init_optimizer() # initialize optimizers
 
 
-    noise = torch.randn(batch_size, noise_dim).to(device)
+    noise = torch.randn(args.batch_size, noise_dim).to(device)
     one = torch.FloatTensor([1])
     mone = one * -1
 
@@ -65,7 +65,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             for p in D.parameters(): # reset requires_grad
                 p.requires_grad = True # they are set to False below in netG update
 
-            Diters = 1 # number of iterations to train discriminator
+            Diters = 2 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
                 j += 1
@@ -86,10 +86,10 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 # errD_real.backward()
 
                 # train with fake
-                input = noise.resize_(args.num_layers, args.batch_size, args.hidden_size_rnn).normal_(0, 1)
+                input = noise.normal_(0,1) # (batch_size, hidden_size)
                 # insert data processing
                 fake = G.generate(input, args, test_batch_size=args.batch_size)
-                fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake])
+                fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
                 errD_fake = torch.mean(fake_tensor)
                 # errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
                 # errD_fake.backward()
@@ -109,12 +109,15 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             istart = time.time()
             # graphs
             original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
-            embeddings = torch.Tensor(graph2vec.infer([nx.from_numpy_matrix(am) for am in adj_mat]))
-            I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
-            G_pred_graphs = G(X=I_output[:, 0, :], Y=Y, length=Y_len)
-            reconst_graphs = G_pred_graphs[0]  # 0 for prediction, 1 for sorted output
+            graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
+            embeddings = torch.Tensor(graph2vec.infer(graph_lst))
+            I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1)))
+            # print(I_output.shape)
+            G_pred_graphs = G.generate(X=I_output, args=args, test_batch_size=args.batch_size)
+            reconst_graphs = G_pred_graphs
             # noise
-            G_pred_noise = G.generate(X=noise, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
+            G_pred_noise = G.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
+            print(G_pred_noise.shape)
             reconst_noise = I(G_pred_noise)
             # compute loss and update inverter loss
             loss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
