@@ -424,6 +424,7 @@ class GraphRNN(nn.Module):
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
             for j in range(min(args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
+                # print(output_y_pred_step.requires_grad)
                 output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
                 self.output.hidden = Variable(self.output.hidden.data).to(self.device)

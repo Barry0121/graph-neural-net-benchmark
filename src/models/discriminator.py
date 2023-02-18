@@ -58,13 +58,13 @@ class NetD(nn.Module):
         # 1) use torch.histogram instead of np.histogram?
         # 2) add lots more statistics, these probably aren't enough to characterize a graph
 
-        degree_hist, _ = np.histogram(
+        degree_hist, _ = torch.histogram(
             np.array(nx.degree_histogram(G)),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
         degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
         degree_hist = self.stat_NNs[0](degree_hist)
 
-        clustering_coefs, _ = np.histogram(
+        clustering_coefs, _ = torch.histogram(
             list(nx.clustering(G).values()),
             bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
         clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)

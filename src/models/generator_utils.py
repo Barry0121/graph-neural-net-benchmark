@@ -130,7 +130,8 @@ def sample_sigmoid(y, sample, device, thresh=0.5, sample_time=2):
                     #     print('all zero',j)
         else:
             # if deterministic
-            y_thresh = torch.Tensor(y.size(0),y.size(1),y.size(2)).to(device)
+            y_thresh = torch.ones_like(y).to(device)
+            # print(y_thresh)
             y_result = torch.gt(y,y_thresh).float()
 
             # if random

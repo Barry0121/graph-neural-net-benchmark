@@ -79,6 +79,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 # print(inputs.shape)
                 input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
                 D_pred = torch.Tensor([D(graph) for graph in input_graphs])
+                print(D_pred.requires_grad)
                 errD_real = torch.mean(D_pred)
                 # print(errD_real)
                 # errD_real.backward(one) # discriminator should assign 1's to true samples
@@ -88,7 +89,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 input = noise.resize_(args.num_layers, args.batch_size, args.hidden_size_rnn).normal_(0, 1)
                 # insert data processing
                 fake = G.generate(input, args, test_batch_size=args.batch_size)
-                errD_fake = torch.mean(D(fake))
+                fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake])
+                errD_fake = torch.mean(fake_tensor)
                 # errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
                 # errD_fake.backward()
 
