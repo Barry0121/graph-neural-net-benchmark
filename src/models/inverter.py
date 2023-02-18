@@ -26,6 +26,7 @@ class Inverter(nn.Module):
         super(Inverter, self).__init__()
         self.layer1 = nn.Linear(input_dim, hidden_dim)
         self.layer2 = nn.Linear(hidden_dim, output_dim)
+        self.relu = nn.ReLU()
 
     def forward(self, embedding):
         """
@@ -36,7 +37,7 @@ class Inverter(nn.Module):
         """
         x = embedding.clone().detach()
         x = self.layer1(x)
-        x = nn.ReLU(x)
+        x = self.relu(x)
         x = self.layer2(x)
         return x
 
