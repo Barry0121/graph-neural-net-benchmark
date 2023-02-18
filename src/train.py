@@ -24,6 +24,11 @@ def choose_device():
 
 
 def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5,lamb=0.1, loss_func='MSE', device=choose_device()):
+    # save losses
+    iloss_lst = []
+    dloss_lst = []
+    gloss_lst = []
+
     # get the dataset
     train, labels = get_dataset_with_label(args.graph_type) # entire dataset as train
     train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
@@ -39,7 +44,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     graph2vec = get_graph2vec(args.graph_type, dim=512) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(I.parameters(), lr=lr)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
-    lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
+    lossI = WGAN_ReconLoss(device, lamb, loss_func)
     G.init_optimizer() # initialize optimizers
 
 
@@ -59,13 +64,13 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             Y_len = data['len']
 
             start=time.time()
-            print("====Start Training Discriminator====")
+            # print("====Start Training Discriminator====")
 
             # enable training
             for p in D.parameters(): # reset requires_grad
                 p.requires_grad = True # they are set to False below in netG update
 
-            Diters = 2 # number of iterations to train discriminator
+            Diters = 1 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
                 j += 1
@@ -99,9 +104,9 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 errD.backward()
                 optimizerD.step()
 
-            print(f"====Finished in {(time.time()-start)%60} sec====")
+            # print(f"====Finished in {(time.time()-start)%60} sec====")
 
-            print("====Start Training Inverter and Generator====")
+            # print("====Start Training Inverter and Generator====")
             G.train()
             G.clear_gradient_opts()
             G.clear_gradient_models()
@@ -117,26 +122,46 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             reconst_graphs = G_pred_graphs
             # noise
             G_pred_noise = G.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
-            print(G_pred_noise.shape)
-            reconst_noise = I(G_pred_noise)
+            # print(G_pred_noise.shape)
+            noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
+            noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
+            reconst_noise = I(noise_embeddings)
             # compute loss and update inverter loss
-            loss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
+            original_graphs = original_graphs.to(device)
+            reconst_graphs = reconst_graphs.to(device)
+            noise = noise.to(device)
+            reconst_noise = reconst_noise.to(device)
+            iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
             optimizerI.zero_grad()
-            loss.backward()
+            iloss.backward()
             optimizerI.step()
             # compute loss and update generator loss
-            errG = torch.mean(G(reconst_graphs))
+            errG = Variable(torch.mean(torch.Tensor([D(nx.from_numpy_matrix(g)) for g in reconst_graphs.cpu().detach().numpy()])), requires_grad=True).to(device)
             errG.backward()
             G.all_steps()
-            print(f"====Finished in {(time.time()-istart)%60} sec====")
+            # print(f"====Finished in {(time.time()-istart)%60} sec====")
 
-        # Print out training information.
+        # Print out training information per epoch.
         if (e+1) % 1 == 0:
             elapsed_time = time.time() - start_time
             print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
-                elapsed_time, e+1, epochs, lossI.item(), errD, errG))
+                elapsed_time, e+1, epochs, iloss.item(), errD, errG))
 
-        # save training loss across
+    # save training loss across
+    iloss_lst.append(iloss.item())
+    dloss_lst.append(errD)
+    gloss_lst.append(errG)
+    np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
+    np.savetxt('./cache/graphrnn/loss_results/discriminator_loss.txt', dloss_lst, delimiter=',')
+    np.savetxt('./cache/graphrnn/loss_results/generator_loss.txt', gloss_lst, delimiter=',')
+
+    # save models
+    Gpath = './cache/graphrnn/saved_model/generator.pth'
+    Ipath = './cache/graphrnn/saved_model/inverter.pth'
+    Dpath = './cache/graphrnn/saved_model/discriminator.pth'
+    torch.save(G.state_dict(), Gpath)
+    torch.save(I.state_dict(), Ipath)
+    torch.save(D.state_dict(), Dpath)
     print("====End of Training====")
 
 

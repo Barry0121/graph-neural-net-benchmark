@@ -41,23 +41,15 @@ class Inverter(nn.Module):
         x = self.layer2(x)
         return x
 
-def choose_device():
-    if torch.cuda.is_available():
-        return 'cuda'
-    elif torch.backends.mps.is_available():
-        return 'mps'
-    else:
-        return 'cpu'
-
 class WGAN_ReconLoss(nn.Module):
-    def __init__(self, lamb: float, loss_func: str='MSE', device=choose_device()) -> None:
+    def __init__(self, device, lamb: float, loss_func: str='MSE') -> None:
         super().__init__()
         self.lamb = lamb
         self.device = device
         if loss_func == 'MSE':
-            self.L = nn.MSELoss(reduction='mean').to(self.device)
+            self.L = nn.MSELoss(reduction='mean')
         elif loss_func == 'CrossEntropy':
-            self.L = nn.CrossEntropyLoss().to(self.device)
+            self.L = nn.CrossEntropyLoss()
         else:
             print("Loss function must be 'MSE' or 'CrossEntropy'.")
 
@@ -72,7 +64,7 @@ class WGAN_ReconLoss(nn.Module):
         if use_gw1:
             return (self.L(x_original, x_reconst) \
                 + self.lamb * self.L(z_original, z_reconst)).to(self.device)
-        else:            
+        else:
             # initialize measures for each metric measure network
             p_o = ot.unif(x_original.number_of_nodes())
             p_r = ot.unif(x_reconst.number_of_nodes())
@@ -80,59 +72,59 @@ class WGAN_ReconLoss(nn.Module):
             C_o = np.asarray(nx.adjacency_matrix(x_original).todense())
             C_r = np.asarray(nx.adjacency_matrix(x_reconst).todense())
             _, log = gromov_wasserstein(
-                C_o, C_r, p_o, p_r, 
+                C_o, C_r, p_o, p_r,
                 'square_loss', verbose=False, log=False)
+            # print(log['gw_dist'])
+            return (log['gw_dist'] + (self.lamb * self.L(z_original, z_reconst))).to(self.device)
 
-            return (log['gw_dist'] + (self.lamb * self.L(z_original, z_reconst)).to(self.device))
+# def train(graphs_name, noise_dim, inverter, generator, epochs=10, lr=0.01, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
+#     # initialize noise, optimizer and loss
+#     i_optimizer = optim.Adam(inverter.parameters(), lr=lr)
+#     i_criterion = WGAN_ReconLoss(lamb, loss_func).to(device)
+#     noise = torch.randn(batch_size, noise_dim).to(device)
+#     graphs = TUDataset(root='../data/raw/TUDataset', name=graphs_name)
 
-def train(graphs_name, noise_dim, inverter, generator, epochs=10, lr=0.01, batch_size=1, lamb=0.1, loss_func='MSE', device=choose_device()):
-    # initialize noise, optimizer and loss
-    i_optimizer = optim.Adam(inverter.parameters(), lr=lr)
-    i_criterion = WGAN_ReconLoss(lamb, loss_func).to(device)
-    noise = torch.randn(batch_size, noise_dim).to(device)
-    graphs = TUDataset(root='../data/raw/TUDataset', name=graphs_name)
+#     # initialize Graph2Vec model
+#     graph2vec = Graph2Vec(wl_iterations=2,
+#                         attributed=False,
+#                         dimensions=128,
+#                         down_sampling=0.0001,
+#                         workers=-1,
+#                         epochs=10)
 
-    # initialize Graph2Vec model
-    graph2vec = Graph2Vec(wl_iterations=2,
-                        attributed=False,
-                        dimensions=128,
-                        down_sampling=0.0001,
-                        workers=-1,
-                        epochs=10)
+#     # train graph2vec with dataset
+#     graphs_nx = [to_networkx(data) for data in graphs]
+#     graph2vec.fit(graphs_nx)
 
-    # train graph2vec with dataset
-    graphs_nx = [to_networkx(data) for data in graphs]
-    graph2vec.fit(graphs_nx)
+#     # get all the embeddings for each graph
+#     graphs_embed = torch.Tensor(graph2vec.get_embedding()).to(device)
 
-    # get all the embeddings for each graph
-    graphs_embed = torch.Tensor(graph2vec.get_embedding()).to(device)
+#     start_time = time.time()
+#     print("====Start Training Inverter====")
+#     for e in epochs:
+#         # for now, treat the input as adj matrices
+#         for j, (adj_mat, _) in enumerate(graph_loader):
+#             # graphs
+#             original_graph = adj_mat
+#             reconst_graph = adj_mat # placeholder
+#             # TODO: once we get generator, change with this line
+#             # reconst_graph = generator(inverter(original_graph))
 
-    start_time = time.time()
-    print("====Start Training Inverter====")
-    for e in epochs:
-        # for now, treat the input as adj matrices
-        for j, (adj_mat, _) in enumerate(graph_loader):
-            # graphs
-            original_graph = adj_mat
-            reconst_graph = adj_mat # placeholder
-            # TODO: once we get generator, change with this line
-            # reconst_graph = generator(inverter(original_graph))
+#             # noise
+#             reconst_noise = noise
+#             # TODO: once we get generator, uncomment this line
+#             # reconst_noise = inverter(generator(noise))
 
-            # noise
-            reconst_noise = noise
-            # TODO: once we get generator, uncomment this line
-            # reconst_noise = inverter(generator(noise))
+#             # compute loss
+#             loss = i_criterion(original_graph, reconst_graph, noise, reconst_noise)
 
-            # compute loss
-            loss = i_criterion(original_graph, reconst_graph, noise, reconst_noise)
-
-            # reset gradients
-            i_optimizer.zero_grad()
-            i_criterion.backward()
-            i_optimizer.step()
-        # Print out training information.
-        if (e+1) % 1 == 0:
-            elapsed_time = time.time() - start_time
-            print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}'.format(
-                elapsed_time, e+1, epochs, i_criterion.item()))
-    print("====End Training Inverter====")
+#             # reset gradients
+#             i_optimizer.zero_grad()
+#             i_criterion.backward()
+#             i_optimizer.step()
+#         # Print out training information.
+#         if (e+1) % 1 == 0:
+#             elapsed_time = time.time() - start_time
+#             print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}'.format(
+#                 elapsed_time, e+1, epochs, i_criterion.item()))
+#     print("====End Training Inverter====")

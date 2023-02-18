@@ -437,10 +437,11 @@ class GraphRNN(nn.Module):
         #     G_pred_list.append(G_pred)
         # return G_pred_list
 
-        adj_pred_list = np.array([])
+        adj_pred_list = []
         for i in range(test_batch_size):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-            adj_pred_list = np.append(adj_pred_list, adj_pred)
-            # adj_pred_list.append(adj_pred)
-        return torch.Tensor(adj_pred_list)
+            # adj_pred_list = np.append(adj_pred_list, adj_pred)
+            adj_pred_list.append(adj_pred)
+
+        return torch.Tensor(np.array(adj_pred_list))
 
