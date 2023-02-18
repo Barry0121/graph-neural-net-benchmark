@@ -109,8 +109,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             istart = time.time()
             # graphs
             original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
-            # TODO: add graph2vec.infer()
-            I_output = I(torch.reshape(original_graphs, (original_graphs.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
+            embeddings = torch.Tensor(graph2vec.infer([nx.from_numpy_matrix(am) for am in adj_mat]))
+            I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
             G_pred_graphs = G(X=I_output[:, 0, :], Y=Y, length=Y_len)
             reconst_graphs = G_pred_graphs[0]  # 0 for prediction, 1 for sorted output
             # noise
