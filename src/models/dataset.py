@@ -42,13 +42,13 @@ def get_dataset_with_label(name, filepath="../data/TUDataset", seed=42):
     labels = [data.y for data in dataset]
     return graphs, labels
 
-def get_graph2vec(name, dataset_source="../data/TUDataset"):
+def get_graph2vec(name, dim=128, dataset_source="../data/TUDataset"):
     """Get the graph embedding"""
     dataset = TUDataset(root=dataset_source, name=name)
     graphs = [to_networkx(data)  for data in dataset]
     print("======Generating Embedding======")
     start = time.time()
-    graph2vec = Graph2Vec(dimensions=128, workers=-1)
+    graph2vec = Graph2Vec(dimensions=dim, workers=-1)
     graph2vec.fit(graphs)
     print(f"======Embedding Created (used {(time.time()-start) % 60} sec)======")
     return graph2vec

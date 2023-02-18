@@ -32,11 +32,11 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     print('noise dimension is: ', noise_dim)
 
     # initialize noise, optimizer and loss
-    I = Inverter(input_dim=512, output_dim=noise_dim, hidden_dim=256)
+    I = Inverter(input_dim=128, output_dim=noise_dim, hidden_dim=64)
     G = GraphRNN(args=args)
     D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
-    graph2vec = get_graph2vec(args.graph_type) # use infer() to generate new graph embedding
+    graph2vec = get_graph2vec(args.graph_type, dim=128) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(I.parameters(), lr=lr)
     optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(lamb, loss_func).to(device)
@@ -65,7 +65,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             for p in D.parameters(): # reset requires_grad
                 p.requires_grad = True # they are set to False below in netG update
 
-            Diters = 10 # number of iterations to train discriminator
+            Diters = 1 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
                 j += 1
@@ -79,7 +79,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 # print(inputs.shape)
                 input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
                 D_pred = torch.Tensor([D(graph) for graph in input_graphs])
-                print(D_pred.requires_grad)
+                # print(D_pred.requires_grad)
                 errD_real = torch.mean(D_pred)
                 # print(errD_real)
                 # errD_real.backward(one) # discriminator should assign 1's to true samples
@@ -95,7 +95,7 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 # errD_fake.backward()
 
                 # compute Wasserstein distance and update parameters
-                errD = errD_real - errD_fake
+                errD = Variable(errD_real - errD_fake, requires_grad=True)
                 errD.backward()
                 optimizerD.step()
 
@@ -109,7 +109,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             istart = time.time()
             # graphs
             original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
-            I_output = I(torch.reshape(original_graphs, (original_graphs.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
+            embeddings = torch.Tensor(graph2vec.infer([nx.from_numpy_matrix(am) for am in adj_mat]))
+            I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1))) # TODO: expected shape: (batch_size, 1, max_prev_node)
             G_pred_graphs = G(X=I_output[:, 0, :], Y=Y, length=Y_len)
             reconst_graphs = G_pred_graphs[0]  # 0 for prediction, 1 for sorted output
             # noise
