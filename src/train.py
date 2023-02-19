@@ -13,6 +13,16 @@ from models.discriminator import *
 from models.generator import *
 from models.inverter import *
 
+from tqdm import tqdm
+import warnings
+
+def fxn():
+    warnings.warn("deprecated", UserWarning)
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    fxn()
+
 
 def choose_device():
     if torch.cuda.is_available():
@@ -52,23 +62,31 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     one = torch.FloatTensor([1])
     mone = one * -1
 
-    start_time = time.time()
+    # enable training
+    D.train(True)
+    G.train(True)
+    I.train(True)
     for e in range(epochs):
         # for now, treat the input as adj matrices
-
-        for i, data in enumerate(train_loader):
+        start_time = time.time()
+        for i, data in tqdm(enumerate(train_loader), desc=f"Training epoch#{e+1}", total=len(train_loader)):
             X = data['x']
             Y = data['y']
             adj_mat = data['adj_mat']
             label = data['label']
             Y_len = data['len']
-
-            start=time.time()
-            # print("====Start Training Discriminator====")
-
+            # zero grad
+            optimizerI.zero_grad()
+            optimizerD.zero_grad()
+            G.clear_gradient_opts()
+            G.clear_gradient_models()
+            # I.zero_grad()
+            # skip uneven batch
+            if adj_mat.size(0) != args.batch_size:
+                continue
             # enable training
-            for p in D.parameters(): # reset requires_grad
-                p.requires_grad = True # they are set to False below in netG update
+            # for p in D.parameters(): # reset requires_grad
+            #     p.requires_grad = True # they are set to False below in netG update
 
             Diters = 1 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
@@ -85,39 +103,34 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
                 D_pred = torch.Tensor([D(graph) for graph in input_graphs])
                 # print(D_pred.requires_grad)
-                errD_real = torch.mean(D_pred)
+                errD_real = Variable(torch.mean(D_pred), requires_grad=True)
                 # print(errD_real)
                 # errD_real.backward(one) # discriminator should assign 1's to true samples
-                # errD_real.backward()
+                errD_real.backward()
 
                 # train with fake
                 input = noise.normal_(0,1) # (batch_size, hidden_size)
                 # insert data processing
                 fake = G.generate(input, args, test_batch_size=args.batch_size)
                 fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
-                errD_fake = torch.mean(fake_tensor)
+                errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
                 # errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
-                # errD_fake.backward()
+                errD_fake.backward()
 
                 # compute Wasserstein distance and update parameters
                 errD = Variable(errD_real - errD_fake, requires_grad=True)
                 errD.backward()
                 optimizerD.step()
 
-            # print(f"====Finished in {(time.time()-start)%60} sec====")
-
-            # print("====Start Training Inverter and Generator====")
-            G.train()
-            G.clear_gradient_opts()
-            G.clear_gradient_models()
-            I.zero_grad()
-            istart = time.time()
             # graphs
             original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
             graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
             embeddings = torch.Tensor(graph2vec.infer(graph_lst))
             I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1)))
             # print(I_output.shape)
+            # if I_output.size(0) != args.batch_size: # this happens at the last batch with uneven sample size
+                # pad_size = args.batch_size-I_output.size(0)
+                # I_output = F.pad(I_output, pad=(0, 0,  0, pad_size), mode='constant', value=0.0) # pad 2D tensor by 0 to get shape (batch_size, hidden_size)
             G_pred_graphs = G.generate(X=I_output, args=args, test_batch_size=args.batch_size)
             reconst_graphs = G_pred_graphs
             # noise
@@ -132,9 +145,9 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             noise = noise.to(device)
             reconst_noise = reconst_noise.to(device)
             iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
-            optimizerI.zero_grad()
             iloss.backward()
             optimizerI.step()
+
             # compute loss and update generator loss
             errG = Variable(torch.mean(torch.Tensor([D(nx.from_numpy_matrix(g)) for g in reconst_graphs.cpu().detach().numpy()])), requires_grad=True).to(device)
             errG.backward()
@@ -147,10 +160,11 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
                 elapsed_time, e+1, epochs, iloss.item(), errD, errG))
 
-    # save training loss across
-    iloss_lst.append(iloss.item())
-    dloss_lst.append(errD)
-    gloss_lst.append(errG)
+        # append training loss across
+        iloss_lst.append(iloss.item())
+        dloss_lst.append(errD)
+        gloss_lst.append(errG)
+    # save loss
     np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/discriminator_loss.txt', dloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/generator_loss.txt', gloss_lst, delimiter=',')
