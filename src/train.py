@@ -59,8 +59,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
 
 
     noise = torch.randn(args.batch_size, noise_dim).to(device)
-    one = torch.FloatTensor([1])
-    mone = one * -1
+    one = torch.tensor(1, dtype=torch.float)
+    mone = torch.tensor(-1, dtype=torch.float)
 
     # enable training
     D.train(True)
@@ -100,13 +100,14 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 # train with real
                 inputs = torch.torch.empty_like(adj_mat).copy_(adj_mat)
                 # print(inputs.shape)
-                input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()] # TODO: Error raise NetworkXError(f"Edge tuple {e} must be a 2-tuple or 3-tuple.")
+                input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()]
                 D_pred = torch.Tensor([D(graph) for graph in input_graphs])
                 # print(D_pred.requires_grad)
                 errD_real = Variable(torch.mean(D_pred), requires_grad=True)
-                # print(errD_real)
-                # errD_real.backward(one) # discriminator should assign 1's to true samples
-                errD_real.backward()
+                # print(errD_real.grad)
+                errD_real.backward(one) # discriminator should assign 1's to true samples
+                # print(errD_real.grad)
+
 
                 # train with fake
                 input = noise.normal_(0,1) # (batch_size, hidden_size)
@@ -114,11 +115,11 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
                 fake = G.generate(input, args, test_batch_size=args.batch_size)
                 fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
                 errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
-                # errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
-                errD_fake.backward()
+                errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
+                # errD_fake.backward()
 
                 # compute Wasserstein distance and update parameters
-                errD = Variable(errD_real - errD_fake, requires_grad=True)
+                errD = Variable(torch.abs(errD_real - errD_fake), requires_grad=True)
                 errD.backward()
                 optimizerD.step()
 
@@ -162,8 +163,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
 
         # append training loss across
         iloss_lst.append(iloss.item())
-        dloss_lst.append(errD)
-        gloss_lst.append(errG)
+        dloss_lst.append(errD.cpu().detach().numpy())
+        gloss_lst.append(errG.cpu().detach().numpy())
     # save loss
     np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/discriminator_loss.txt', dloss_lst, delimiter=',')
