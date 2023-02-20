@@ -33,7 +33,7 @@ def choose_device():
         return 'cpu'
 
 
-def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5,lamb=0.1, loss_func='MSE', device=choose_device()):
+def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr=1e-3, betas=1e-5,lamb=0.1, loss_func='MSE', device=choose_device()):
     # save losses
     iloss_lst = []
     dloss_lst = []
@@ -47,15 +47,15 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     print('noise dimension is: ', noise_dim)
 
     # initialize noise, optimizer and loss
-    I = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
-    G = GraphRNN(args=args)
-    D = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
+    netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
+    netG = GraphRNN(args=args)
+    netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
 
     graph2vec = get_graph2vec(args.graph_type, dim=512) # use infer() to generate new graph embedding
-    optimizerI = optim.Adam(I.parameters(), lr=lr)
-    optimizerD = optim.Adam(D.parameters(), lr=lr, betas=[betas for _ in range(2)])
+    optimizerI = optim.Adam(netI.parameters(), lr=lr)
+    optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(device, lamb, loss_func)
-    G.init_optimizer() # initialize optimizers
+    netG.init_optimizer() # initialize optimizers
 
 
     noise = torch.randn(args.batch_size, noise_dim).to(device)
@@ -63,12 +63,13 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     mone = torch.tensor(-1, dtype=torch.float)
 
     # enable training
-    D.train(True)
-    G.train(True)
-    I.train(True)
+    # netD.train(True)
+    # netG.train(True)
+    # netI.train(True)
     for e in range(epochs):
         # for now, treat the input as adj matrices
         start_time = time.time()
+        e_errI, e_errD, e_errG, count_batch = 0, 0, 0, 0
         for i, data in tqdm(enumerate(train_loader), desc=f"Training epoch#{e+1}", total=len(train_loader)):
             X = data['x']
             Y = data['y']
@@ -78,8 +79,8 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             # zero grad
             optimizerI.zero_grad()
             optimizerD.zero_grad()
-            G.clear_gradient_opts()
-            G.clear_gradient_models()
+            netG.clear_gradient_opts()
+            netG.clear_gradient_models()
             # I.zero_grad()
             # skip uneven batch
             if adj_mat.size(0) != args.batch_size:
@@ -88,83 +89,109 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
             # for p in D.parameters(): # reset requires_grad
             #     p.requires_grad = True # they are set to False below in netG update
 
-            Diters = 1 # number of iterations to train discriminator
+            ######################
+            # Discriminator Update
+
+            Diters = 10 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
                 j += 1
                 # weight clipping: clamp parameters to a cube
-                for p in D.parameters():
+                netD.train(True)
+                for p in netD.parameters():
                     p.data.clamp_(clamp_lower, clamp_upper)
-                D.zero_grad()
+                netD.zero_grad()
 
                 # train with real
                 inputs = torch.torch.empty_like(adj_mat).copy_(adj_mat)
-                # print(inputs.shape)
                 input_graphs = [nx.from_numpy_matrix(i) for i in inputs.detach().numpy()]
-                D_pred = torch.Tensor([D(graph) for graph in input_graphs])
-                # print(D_pred.requires_grad)
+                D_pred = torch.Tensor([netD(graph) for graph in input_graphs])
                 errD_real = Variable(torch.mean(D_pred), requires_grad=True)
-                # print(errD_real.grad)
                 errD_real.backward(one) # discriminator should assign 1's to true samples
-                # print(errD_real.grad)
 
 
                 # train with fake
                 input = noise.normal_(0,1) # (batch_size, hidden_size)
                 # insert data processing
-                fake = G.generate(input, args, test_batch_size=args.batch_size)
-                fake_tensor = torch.Tensor([D(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
+                fake = netG.generate(input, args, test_batch_size=args.batch_size)
+                fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
                 errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
                 errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
-                # errD_fake.backward()
 
                 # compute Wasserstein distance and update parameters
-                errD = Variable(torch.abs(errD_real - errD_fake), requires_grad=True)
-                errD.backward()
+                errD = Variable(errD_real - errD_fake, requires_grad=False)
+                # errD.backward() # Winston: backward was already called for errD_real and errD_fake
                 optimizerD.step()
 
-            # graphs
-            original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
-            graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
-            embeddings = torch.Tensor(graph2vec.infer(graph_lst))
-            I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1)))
-            # print(I_output.shape)
-            # if I_output.size(0) != args.batch_size: # this happens at the last batch with uneven sample size
-                # pad_size = args.batch_size-I_output.size(0)
-                # I_output = F.pad(I_output, pad=(0, 0,  0, pad_size), mode='constant', value=0.0) # pad 2D tensor by 0 to get shape (batch_size, hidden_size)
-            G_pred_graphs = G.generate(X=I_output, args=args, test_batch_size=args.batch_size)
-            reconst_graphs = G_pred_graphs
-            # noise
-            G_pred_noise = G.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
-            # print(G_pred_noise.shape)
-            noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
-            noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
-            reconst_noise = I(noise_embeddings)
-            # compute loss and update inverter loss
-            original_graphs = original_graphs.to(device)
-            reconst_graphs = reconst_graphs.to(device)
-            noise = noise.to(device)
-            reconst_noise = reconst_noise.to(device)
-            iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
-            iloss.backward()
-            optimizerI.step()
+            # ========== Train Generator ==================
+            for p in netD.parameters():
+                p.requires_grad = False # to avoid computation
+            netD.zero_grad()
+            # in case our last batch was the tail batch of the dataloader,
+            # make sure we feed a full batch of noise
+            noisev = Variable(noise.normal_(0,1))
+            fake = netG(noisev)
+            errG = netD(fake)
+            errG.backward(one)
+            netG.all_steps()
+            gen_iterations += 1
 
-            # compute loss and update generator loss
-            errG = Variable(torch.mean(torch.Tensor([D(nx.from_numpy_matrix(g)) for g in reconst_graphs.cpu().detach().numpy()])), requires_grad=True).to(device)
-            errG.backward()
-            G.all_steps()
-            # print(f"====Finished in {(time.time()-istart)%60} sec====")
+
+            # Winston's outline for inverter training
+            # 0. train graph2vec on {generator distribution, true distribution}
+            # 1. sample true samples x
+            # 2. recon_graph = netG(netI(x))
+            # 3. sample noise z
+            # 4. recon_noise = netI(netG(z))
+            # 5. minimize GW_dist(recon_graph - x) + lambda * MSE(recon_noise - z)
+
+            # ========== Train Inverter =================
+            # TODO: fix variables, move this into a different training loop
+            if train_inverter:
+                # graphs
+                original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
+                graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
+                embeddings = torch.Tensor(graph2vec.infer(graph_lst))
+                I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1)))
+                # print(I_output.shape)
+                G_pred_graphs = G.generate(X=I_output, args=args, test_batch_size=args.batch_size)
+                reconst_graphs = G_pred_graphs
+                # noise
+                G_pred_noise = G.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
+                # print(G_pred_noise.shape)
+                noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
+                noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
+                reconst_noise = I(noise_embeddings)
+                # compute loss and update inverter loss
+                original_graphs = original_graphs.to(device)
+                reconst_graphs = reconst_graphs.to(device)
+                noise = noise.to(device)
+                reconst_noise = reconst_noise.to(device)
+                iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
+                iloss.backward()
+                optimizerI.step()
+
+
+
+
+            # # compute mean error across all batches
+            # # e_errD += errD.item()
+            e_errG += errG.item()
+            # # e_errI += iloss.item()
+            count_batch += 1
 
         # Print out training information per epoch.
-        if (e+1) % 1 == 0:
-            elapsed_time = time.time() - start_time
-            print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
-                elapsed_time, e+1, epochs, iloss.item(), errD, errG))
+        # if (e+1) % 1 == 0:
+        #     elapsed_time = time.time() - start_time
+        #     print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
+        #         elapsed_time, e+1, epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
+
 
         # append training loss across
-        iloss_lst.append(iloss.item())
-        dloss_lst.append(errD.cpu().detach().numpy())
-        gloss_lst.append(errG.cpu().detach().numpy())
+        # iloss_lst.append(e_errI/count_batch)
+        # dloss_lst.append(e_errD/count_batch)
+        gloss_lst.append(e_errG/count_batch)
+
     # save loss
     np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/discriminator_loss.txt', dloss_lst, delimiter=',')
@@ -174,9 +201,9 @@ def train(args, num_layers=4, clamp_lower=-0.01, clamp_upper=0.01, epochs=10, lr
     Gpath = './cache/graphrnn/saved_model/generator.pth'
     Ipath = './cache/graphrnn/saved_model/inverter.pth'
     Dpath = './cache/graphrnn/saved_model/discriminator.pth'
-    torch.save(G.state_dict(), Gpath)
-    torch.save(I.state_dict(), Ipath)
-    torch.save(D.state_dict(), Dpath)
+    torch.save(netG.state_dict(), Gpath)
+    torch.save(netI.state_dict(), Ipath)
+    torch.save(netD.state_dict(), Dpath)
     print("====End of Training====")
 
 
