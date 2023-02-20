@@ -315,10 +315,19 @@ class GraphRNN(nn.Module):
         self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=self.args.lr)
         self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=self.args.milestones, gamma=self.args.lr_rate)
         self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=self.args.milestones, gamma=self.args.lr_rate)
+        return self.optimizer_rnn, self.optimizer_output, self.scheduler_rnn, self.scheduler_output
 
     def clear_gradient_models(self):
         self.rnn.zero_grad()
         self.output.zero_grad()
+
+    def train(self, flag):
+        if flag:
+            self.rnn.train(True)
+            self.output.train(True)
+        else:
+            self.rnn.train(False)
+            self.output.train(False)
 
     def clear_gradient_opts(self):
         self.optimizer_rnn.zero_grad()
@@ -386,7 +395,7 @@ class GraphRNN(nn.Module):
         y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
         sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
         sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
-        return y_pred, sorted_output_y
+        return y_pred
 
     def generate(self, X, args, test_batch_size=1):
         """
@@ -427,15 +436,6 @@ class GraphRNN(nn.Module):
             y_pred_long[:, i:i + 1, :] = x_step
             self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
-
-        # TODO: check my work, I am commenting this part out because we don't want graph objects, we want adj_matrix
-        # # collect the graphs
-        # G_pred_list = []
-        # for i in range(test_batch_size):
-        #     adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-        #     G_pred = get_graph(adj_pred) # get a graph from zero-padded adj
-        #     G_pred_list.append(G_pred)
-        # return G_pred_list
 
         adj_pred_list = []
         for i in range(test_batch_size):

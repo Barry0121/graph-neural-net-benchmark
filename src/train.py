@@ -55,17 +55,14 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
     optimizerI = optim.Adam(netI.parameters(), lr=lr)
     optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(device, lamb, loss_func)
-    netG.init_optimizer() # initialize optimizers
+    G_optimizer_rnn, G_optimizer_output, G_scheduler_rnn, G_scheduler_output = netG.init_optimizer() # initialize optimizers
 
 
     noise = torch.randn(args.batch_size, noise_dim).to(device)
     one = torch.tensor(1, dtype=torch.float)
     mone = torch.tensor(-1, dtype=torch.float)
 
-    # enable training
-    # netD.train(True)
-    # netG.train(True)
-    # netI.train(True)
+    gen_iterations = 0
     for e in range(epochs):
         # for now, treat the input as adj matrices
         start_time = time.time()
@@ -79,25 +76,36 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
             # zero grad
             optimizerI.zero_grad()
             optimizerD.zero_grad()
-            netG.clear_gradient_opts()
-            netG.clear_gradient_models()
-            # I.zero_grad()
+            G_optimizer_rnn.zero_grad()
+            G_optimizer_output.zero_grad()
+            # netG.clear_gradient_opts()
+            # netG.clear_gradient_models()
             # skip uneven batch
             if adj_mat.size(0) != args.batch_size:
                 continue
-            # enable training
-            # for p in D.parameters(): # reset requires_grad
-            #     p.requires_grad = True # they are set to False below in netG update
 
             ######################
             # Discriminator Update
             ######################
-            Diters = 10 # number of iterations to train discriminator
+            # number of iteration to train the discriminator
+            if gen_iterations < 25 or gen_iterations % 500 == 0:
+                Diters = 20
+            else:
+                Diters = 5
             j = 0 # counter for 1, 2, ... Diters
-            while j < Diters and i < len(train_loader):
+
+            # enable training
+            for p in netD.parameters(): # reset requires_grad
+                p.requires_grad = True # they are set to False below in netG update
+
+            # netD.train(True)
+            for p in netG.parameters():
+                p.requires_grad = False
+            # netG.train(False)
+            b_errD = 0
+            while j < Diters:
                 j += 1
                 # weight clipping: clamp parameters to a cube
-                netD.train(True)
                 for p in netD.parameters():
                     p.data.clamp_(clamp_lower, clamp_upper)
                 netD.zero_grad()
@@ -120,20 +128,29 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
 
                 # compute Wasserstein distance and update parameters
                 errD = Variable(errD_real - errD_fake, requires_grad=False)
-                # errD.backward() # Winston: backward was already called for errD_real and errD_fake
                 optimizerD.step()
+                b_errD += errD
 
             # ========== Train Generator ==================
             for p in netD.parameters():
                 p.requires_grad = False # to avoid computation
-            netD.zero_grad()
+            for p in netG.parameters():
+                p.requires_grad = True # to avoid computation
+            # netD.train(False)
+            # netG.train(True)
+            netG.clear_gradient_models()
+            G_optimizer_rnn.zero_grad()
+            G_optimizer_output.zero_grad()
             # in case our last batch was the tail batch of the dataloader,
             # make sure we feed a full batch of noise
             noisev = Variable(noise.normal_(0,1))
-            fake = netG(noisev)
-            errG = netD(fake)
+            fake = netG.generate(noisev, args=args, test_batch_size=args.batch_size)
+            fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
+            errG = Variable(torch.mean(fake_tensor), requires_grad=True)
             errG.backward(one)
-            netG.all_steps()
+            G_optimizer_rnn.step()
+            G_optimizer_output.step()
+            # netG.all_steps()
             gen_iterations += 1
 
 
@@ -177,7 +194,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
 
 
             # # compute mean error across all batches
-            e_errD += errD.item()
+            e_errD += b_errD.item()
             e_errG += errG.item()
             if train_inverter:
                 e_errI += iloss.item()
