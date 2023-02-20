@@ -91,7 +91,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
 
             ######################
             # Discriminator Update
-
+            ######################
             Diters = 10 # number of iterations to train discriminator
             j = 0 # counter for 1, 2, ... Diters
             while j < Diters and i < len(train_loader):
@@ -148,20 +148,22 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
             # ========== Train Inverter =================
             # TODO: fix variables, move this into a different training loop
             if train_inverter:
-                # graphs
                 original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
                 graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
+                # retrain graph2vec
+                graph2vec.fit(graph_lst)
+                # genearte embedding
                 embeddings = torch.Tensor(graph2vec.infer(graph_lst))
-                I_output = I(torch.reshape(embeddings, (embeddings.shape[0], -1)))
+                I_output = netI(torch.reshape(embeddings, (embeddings.shape[0], -1)))
                 # print(I_output.shape)
-                G_pred_graphs = G.generate(X=I_output, args=args, test_batch_size=args.batch_size)
+                G_pred_graphs = netG.generate(X=I_output, args=args, test_batch_size=args.batch_size)
                 reconst_graphs = G_pred_graphs
                 # noise
-                G_pred_noise = G.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
+                G_pred_noise = netG.generate(X=noise, args=args, test_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
                 # print(G_pred_noise.shape)
                 noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
                 noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
-                reconst_noise = I(noise_embeddings)
+                reconst_noise = netI(noise_embeddings)
                 # compute loss and update inverter loss
                 original_graphs = original_graphs.to(device)
                 reconst_graphs = reconst_graphs.to(device)
@@ -175,35 +177,46 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.01, clamp_upp
 
 
             # # compute mean error across all batches
-            # # e_errD += errD.item()
+            e_errD += errD.item()
             e_errG += errG.item()
-            # # e_errI += iloss.item()
+            if train_inverter:
+                e_errI += iloss.item()
             count_batch += 1
 
         # Print out training information per epoch.
-        # if (e+1) % 1 == 0:
-        #     elapsed_time = time.time() - start_time
-        #     print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
-        #         elapsed_time, e+1, epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
+        if train_inverter:
+            if (e+1) % 1 == 0:
+                elapsed_time = time.time() - start_time
+                print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
+                    elapsed_time, e+1, epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
+        else:
+            if (e+1) % 1 == 0:
+                elapsed_time = time.time() - start_time
+                print('Elapsed time [{:.4f}], Iteration [{}/{}], D Loss: {:.4f}, G Loss {:.4f}'.format(
+                    elapsed_time, e+1, epochs, e_errD/count_batch, e_errG/count_batch))
 
 
         # append training loss across
-        # iloss_lst.append(e_errI/count_batch)
-        # dloss_lst.append(e_errD/count_batch)
+        if train_inverter:
+            iloss_lst.append(e_errI/count_batch)
+        dloss_lst.append(e_errD/count_batch)
         gloss_lst.append(e_errG/count_batch)
 
     # save loss
-    np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
+    if train_inverter:
+        np.savetxt('./cache/graphrnn/loss_results/inverter_loss.txt', iloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/discriminator_loss.txt', dloss_lst, delimiter=',')
     np.savetxt('./cache/graphrnn/loss_results/generator_loss.txt', gloss_lst, delimiter=',')
 
     # save models
     Gpath = './cache/graphrnn/saved_model/generator.pth'
-    Ipath = './cache/graphrnn/saved_model/inverter.pth'
     Dpath = './cache/graphrnn/saved_model/discriminator.pth'
     torch.save(netG.state_dict(), Gpath)
-    torch.save(netI.state_dict(), Ipath)
     torch.save(netD.state_dict(), Dpath)
+    if train_inverter:
+        Ipath = './cache/graphrnn/saved_model/inverter.pth'
+        torch.save(netI.state_dict(), Ipath)
+
     print("====End of Training====")
 
 
