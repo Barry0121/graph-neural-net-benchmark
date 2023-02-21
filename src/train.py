@@ -41,7 +41,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     # get the dataset
     train, labels = get_dataset_with_label(args.graph_type) # entire dataset as train
-    train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
+    train_dataset = Graph_sequence_sampler_pytorch_nobfs(train, labels, args)
     train_loader = get_dataloader_labels(train_dataset, args)
     noise_dim = args.hidden_size_rnn
     print('noise dimension is: ', noise_dim)
@@ -50,6 +50,10 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     netG = GraphRNN(args=args)
     netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
+
+    # set up a register_hook to check parameter gradient
+    for param in netD.parameters():
+        h = param.register_hook(lambda grad: print("Parameter Update with gradient {:.4f}".format(grad)))
 
     # check model parameters
     # for param in netD.parameters():
@@ -79,6 +83,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             adj_mat = data['adj_mat']
             label = data['label']
             Y_len = data['len']
+
             # zero grad
             optimizerI.zero_grad()
             optimizerD.zero_grad()
@@ -101,21 +106,12 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             j = 0 # counter for 1, 2, ... Diters
 
             # enable training
-            # for p in netD.parameters(): # reset requires_grad
-            #     p.requires_grad = True # they are set to False below in netG update
             netD.train(True)
-            # for p in netG.parameters():
-            #     p.requires_grad = False
             netG.train(False)
-            # print("Check if the model is training: initial value.")
-            # for p in netD.parameters():
-            #     print("Parameters gradients? :", p.requires_grad)
-            #     print("Parameters values: ", p.data)
-            #     print("Parameters grad: ", p.grad)
             b_errD = 0
             while j < Diters:
-
                 j += 1
+                # TODO: commenting this part out for testing
                 # weight clipping: clamp parameters to a cube
                 # for p in netD.parameters():
                 #     p.data.clamp_(clamp_lower, clamp_upper)
@@ -152,10 +148,6 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 b_errD += errD
 
             # ========== Train Generator ==================
-            # for p in netD.parameters():
-            #     p.requires_grad = False # to avoid computation
-            # for p in netG.parameters():
-            #     p.requires_grad = True
             netD.train(False)
             netG.train(True)
             netG.clear_gradient_models()
@@ -165,7 +157,6 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # make sure we feed a full batch of noise
             noisev = Variable(noise.normal_(0,1))
             fake = netG(noisev, args=args, output_batch_size=args.batch_size)
-            # fake = netG(noisev, X, Y, Y_len)[0]
             fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
             errG = Variable(torch.mean(fake_tensor), requires_grad=True)
             errG.backward(one)
