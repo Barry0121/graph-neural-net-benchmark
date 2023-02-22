@@ -432,16 +432,19 @@ class GraphRNN(nn.Module):
                 # print(output_y_pred_step.requires_grad)
                 output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
-                self.output.hidden = Variable(self.output.hidden.data).to(self.device)
+                # self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step
-            self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
+            # self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
 
-        adj_pred_list = []
+        init_adj_pred = decode_adj(y_pred_long_data[0].cpu())
+        adj_pred_list = torch.zeros((output_batch_size, init_adj_pred.size(0), init_adj_pred.size(1)))
         for i in range(output_batch_size):
-            adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
+            # adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
             # adj_pred_list = np.append(adj_pred_list, adj_pred)
-            adj_pred_list.append(adj_pred)
+            # adj_pred_list.append(adj_pred)
+            adj_pred_list[i, :, :] = decode_adj(y_pred_long_data[i].cpu())
 
-        return torch.Tensor(np.array(adj_pred_list))
+        # return torch.Tensor(np.array(adj_pred_list))
+        return adj_pred_list
 

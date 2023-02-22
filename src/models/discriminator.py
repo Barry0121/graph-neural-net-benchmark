@@ -57,28 +57,7 @@ class NetD(nn.Module):
         # possible modifications:
         # 1) use torch.histogram instead of np.histogram?
         # 2) add lots more statistics, these probably aren't enough to characterize a graph
-        # out_lst = np.array([])
-        # for g in G:
-        #     graph = nx.from_numpy_matrix(g.numpy())
-        #     degree_hist, _ = np.histogram(
-        #         np.array(nx.degree_histogram(graph)),
-        #         bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
-        #     degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
-        #     degree_hist = self.stat_NNs[0](degree_hist)
 
-        #     clustering_coefs, _ = np.histogram(
-        #         list(nx.clustering(graph).values()),
-        #         bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
-        #     clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
-        #     clustering_coefs = self.stat_NNs[1](clustering_coefs)
-
-        #     stats = torch.Tensor([degree_hist, clustering_coefs])
-        #     out = self.combine(stats)
-        #     out_lst = np.append(out_lst, out.detach().numpy())
-
-        # return torch.from_numpy(out_lst)
-
-        # Non-forloop version
         graph = [nx.from_numpy_matrix(g.numpy()) for g in G]
         degree_hist = np.array([np.histogram(
             np.array(nx.degree_histogram(g)),
@@ -97,9 +76,7 @@ class NetD(nn.Module):
         stats = torch.cat([degree_hist, clustering_coefs], dim=1)
         out = self.combine(stats)
 
-        return torch.from_numpy(out)
-
-
+        return torch.mean(out)
 
 class SimpleNN(nn.Module):
     def __init__(self, input_dim, hidden_dim):
@@ -128,31 +105,3 @@ class SimpleNN(nn.Module):
         """
         x = self.reduce(x)
         return self.act(x)
-
-# class TestNN(nn.Module):
-#     def __init__(self, input_dim, hidden_dim):
-#         """
-#         A single-layer neural network with tanh activation (motivation: outputs should lie in
-#         (-1,1)) whose purpose is to process a vector representing a certain statistic computed on
-#         a graph. The vector is mapped to a scalar (in (-1,1)).
-
-#         param input_dim: the size of the aforementioned vector
-#         param hidden_dim: the size of the hidden-layer's
-#         """
-#         super(TestNN, self).__init__()
-#         self.input_dim = input_dim
-#         self.hidden_dim = hidden_dim
-#         self.reduce = nn.Sequential(
-#             nn.Linear(self.input_dim, self.hidden_dim),
-#             nn.Tanh(),
-#             nn.Linear(self.hidden_dim, 1)
-#         )
-#         self.act = nn.Tanh()
-#         return
-
-#     def forward(self, x):
-#         """
-#         param x: the vector representing a certain statistic
-#         """
-#         x = self.reduce(x)
-#         return self.act(x)
