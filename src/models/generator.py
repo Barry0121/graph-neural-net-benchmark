@@ -397,8 +397,12 @@ class GraphRNN(nn.Module):
         # provide a option to change number of graphs generated
         if test_batch_size is None:
             test_batch_size = args.test_batch_size
-        input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
-        self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
+
+        # self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
+        # print(self.rnn.hidden.shape)
+        # print(X.shape)
+        # return
+        self.rnn.hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
 
         # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(test_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
@@ -437,10 +441,8 @@ class GraphRNN(nn.Module):
         #     G_pred_list.append(G_pred)
         # return G_pred_list
 
-        adj_pred_list = np.array([])
+        adj_pred_list = []
         for i in range(test_batch_size):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-            adj_pred_list = np.append(adj_pred_list, adj_pred)
-            # adj_pred_list.append(adj_pred)
-        return torch.Tensor(adj_pred_list)
-
+            adj_pred_list.append(adj_pred)
+        return adj_pred_list
