@@ -97,7 +97,8 @@ class NetD(nn.Module):
         stats = torch.cat([degree_hist, clustering_coefs], dim=1)
         out = self.combine(stats)
 
-        return out
+        return torch.from_numpy(out)
+
 
 
 class SimpleNN(nn.Module):
