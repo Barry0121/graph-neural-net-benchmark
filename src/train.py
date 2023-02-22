@@ -50,10 +50,14 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     netG = GraphRNN(args=args)
     netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
+    # netD = SimpleNN(385641, 1)
 
     # set up a register_hook to check parameter gradient
-    for param in netD.parameters():
-        h = param.register_hook(lambda grad: print("Parameter Update with gradient {:.4f}".format(grad)))
+    # for param in netD.parameters():
+    #     h = param.register_hook(lambda grad: print(f"Parameter Update with gradient {grad}"))
+    hd = list(netD.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update with gradient {grad}"))
+    hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update with gradient {grad}"))
+
 
     # check model parameters
     # for param in netD.parameters():
@@ -113,57 +117,63 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 j += 1
                 # TODO: commenting this part out for testing
                 # weight clipping: clamp parameters to a cube
-                # for p in netD.parameters():
-                #     p.data.clamp_(clamp_lower, clamp_upper)
+                for p in netD.parameters():
+                    p.data.clamp_(clamp_lower, clamp_upper)
                 netD.zero_grad()
 
                 # train with real
-                inputs = torch.torch.empty_like(adj_mat).copy_(adj_mat)
-                input_graphs = [nx.from_numpy_matrix(i) for i in inputs.numpy()]
-                D_pred = torch.Tensor([netD(graph) for graph in input_graphs])
-                errD_real = Variable(torch.mean(D_pred), requires_grad=True)
-                errD_real.backward(one) # discriminator should assign 1's to true samples
-
+                inputs = torch.clone(adj_mat)
+                # test_input = inputs.reshape(args.batch_size, -1).to(torch.float32)
+                D_pred = netD(inputs)
+                # errD_real = Variable(torch.mean(D_pred), requires_grad=True) # TODO: check mean behavior
+                errD_real = torch.mean(D_pred)
+                errD_real.backward() # discriminator should assign 1's to true samples
+                # print("Error Real: ", errD_real)
 
                 # train with fake
                 input = noise.normal_(0,1) # (batch_size, hidden_size)
                 # insert data processing
-                fake = netG(input, args, output_batch_size=args.batch_size)
-                fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.numpy()])
-                errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
+                fake = netG(input) # very slow
+                fake_tensor = netD(fake)
+                # fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.numpy()])
+                # errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
+                errD_fake = torch.mean(fake_tensor)
                 errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
 
                 # compute Wasserstein distance and update parameters
-                errD = Variable(errD_real - errD_fake, requires_grad=False)
-
-                # print(f"Check if the model is training: iterative value at #{j}.")
-                # for p in netD.parameters():
-                #     print("Parameters gradients? :", p.requires_grad)
-                #     print("Parameters values: ", p.data)
-                #     print("Parameters grad: ", p.grad)
-
-
+                errD = errD_real - errD_fake
                 optimizerD.step()
+                # print("Error Fake: ", errD_fake)
+
+                # print("Error gradient: ", errD_fake.grad, errD_real.grad)
+
+                print(f"Check if the model is training: iterative value at #{j}.")
+                for p in netD.parameters():
+                    print("Parameters gradients? :", p.requires_grad) # True
+                    print("Parameters values: ", p.data) # values
+                    print("Parameters grad: ", p.grad) # None
+                print('\n')
+
                 print(f"Iterative errD {errD.item()}, errD_real {errD_real.item()}, errD_fake {errD_fake.item()}: ")
                 b_errD += errD
 
-            # ========== Train Generator ==================
-            netD.train(False)
-            netG.train(True)
-            netG.clear_gradient_models()
-            G_optimizer_rnn.zero_grad()
-            G_optimizer_output.zero_grad()
-            # in case our last batch was the tail batch of the dataloader,
-            # make sure we feed a full batch of noise
-            noisev = Variable(noise.normal_(0,1))
-            fake = netG(noisev, args=args, output_batch_size=args.batch_size)
-            fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.detach().numpy()])
-            errG = Variable(torch.mean(fake_tensor), requires_grad=True)
-            errG.backward(one)
-            G_optimizer_rnn.step()
-            G_optimizer_output.step()
-            # netG.all_steps()
-            gen_iterations += 1
+            # # ========== Train Generator ==================
+            # netD.train(False)
+            # netG.train(True)
+            # # netG.clear_gradient_models()
+            # G_optimizer_rnn.zero_grad()
+            # G_optimizer_output.zero_grad()
+            # # in case our last batch was the tail batch of the dataloader,
+            # # make sure we feed a full batch of noise
+            # noisev = Variable(noise.normal_(0,1))
+            # fake = netG(noisev)
+            # fake_tensor = netD(fake)
+            # errG = Variable(torch.mean(fake_tensor), requires_grad=True)
+            # errG.backward(one)
+            # G_optimizer_rnn.step()
+            # G_optimizer_output.step()
+            # # netG.all_steps()
+            # gen_iterations += 1
 
 
             # Winston's outline for inverter training
@@ -178,7 +188,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # TODO: fix variables, move this into a different training loop
             if train_inverter:
                 original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
-                graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in adj_mat]
+                graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in adj_mat]
                 # retrain graph2vec
                 graph2vec.fit(graph_lst)
                 # genearte embedding
@@ -190,7 +200,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 # noise
                 G_pred_noise = netG(X=noise, args=args, output_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
                 # print(G_pred_noise.shape)
-                noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
+                noise_graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in G_pred_noise]
                 noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
                 reconst_noise = netI(noise_embeddings)
                 # compute loss and update inverter loss
