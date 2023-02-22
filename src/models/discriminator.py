@@ -58,22 +58,26 @@ class NetD(nn.Module):
         # 1) use torch.histogram instead of np.histogram?
         # 2) add lots more statistics, these probably aren't enough to characterize a graph
 
-        degree_hist, _ = np.histogram(
-            np.array(nx.degree_histogram(G)),
-            bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
-        degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
-        degree_hist = self.stat_NNs[0](degree_hist)
+        out_lst = np.array([])
+        for g in G:
+            graph = nx.from_numpy_matrix(g.numpy())
+            degree_hist, _ = np.histogram(
+                np.array(nx.degree_histogram(graph)),
+                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
+            degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
+            degree_hist = self.stat_NNs[0](degree_hist)
 
-        clustering_coefs, _ = np.histogram(
-            list(nx.clustering(G).values()),
-            bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
-        clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
-        clustering_coefs = self.stat_NNs[1](clustering_coefs)
+            clustering_coefs, _ = np.histogram(
+                list(nx.clustering(graph).values()),
+                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)
+            clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
+            clustering_coefs = self.stat_NNs[1](clustering_coefs)
 
-        stats = torch.Tensor([degree_hist, clustering_coefs])
-        out = self.combine(stats)
+            stats = torch.Tensor([degree_hist, clustering_coefs])
+            out = self.combine(stats)
+            out_lst = np.append(out_lst, out.detach().numpy())
 
-        return out
+        return torch.from_numpy(out_lst)
 
 class SimpleNN(nn.Module):
     def __init__(self, input_dim, hidden_dim):

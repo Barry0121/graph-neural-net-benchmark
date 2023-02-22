@@ -405,21 +405,10 @@ class GraphRNN(nn.Module):
         test_batch_size: number of graphs you want to generate
         """
         # provide a option to change number of graphs generated
-<<<<<<< HEAD
-        if test_batch_size is None:
-            test_batch_size = args.test_batch_size
-
-        # self.rnn.hidden = self.rnn.init_hidden(test_batch_size)
-        # print(self.rnn.hidden.shape)
-        # print(X.shape)
-        # return
-        self.rnn.hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
-=======
         if output_batch_size is None:
             output_batch_size = args.test_batch_size
         input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
         self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
->>>>>>> 7e190e8e23464940be46fc40c74cc98be6bd7b85
 
         # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(output_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
@@ -449,22 +438,6 @@ class GraphRNN(nn.Module):
             self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
 
-<<<<<<< HEAD
-        # TODO: check my work, I am commenting this part out because we don't want graph objects, we want adj_matrix
-        # # collect the graphs
-        # G_pred_list = []
-        # for i in range(test_batch_size):
-        #     adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-        #     G_pred = get_graph(adj_pred) # get a graph from zero-padded adj
-        #     G_pred_list.append(G_pred)
-        # return G_pred_list
-
-        adj_pred_list = []
-        for i in range(test_batch_size):
-            adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
-            adj_pred_list.append(adj_pred)
-        return adj_pred_list
-=======
         adj_pred_list = []
         for i in range(output_batch_size):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
@@ -473,4 +446,3 @@ class GraphRNN(nn.Module):
 
         return torch.Tensor(np.array(adj_pred_list))
 
->>>>>>> 7e190e8e23464940be46fc40c74cc98be6bd7b85
