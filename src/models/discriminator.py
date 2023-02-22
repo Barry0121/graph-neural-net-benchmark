@@ -36,10 +36,10 @@ class NetD(nn.Module):
         self.stat_input_dim = stat_input_dim
         self.stat_hidden_dim = stat_hidden_dim
         self.num_stat = num_stat
-        self.stat_NNs = [
+        self.stat_NNs = nn.ModuleList([
             SimpleNN(self.stat_input_dim, self.stat_hidden_dim)
             for _ in range(self.num_stat)
-        ]
+        ])
 
         self.combine = nn.Sequential(
             nn.Linear(self.num_stat, 1, bias=False), # bias=False since this should be an "average"
@@ -102,3 +102,8 @@ class SimpleNN(nn.Module):
         """
         x = self.reduce(x)
         return self.act(x)
+
+# Test model parameters 
+# sn = NetD(10, 10, 2)
+# for i in sn.parameters():
+#     print(i.data)

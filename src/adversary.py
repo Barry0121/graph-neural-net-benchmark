@@ -1,4 +1,4 @@
-# TODO: need to intergrate with train.py
+
 
 def generate_adversary(self):
     # Load the trained models.
@@ -10,7 +10,7 @@ def generate_adversary(self):
     # Choose the classifier to generate adversary examples against.
     print('Classifier:', self.classifier)
     if self.classifier == 'lenet':
-        C = LeNet().to(self.device)
+        C = LeNet().to(self.device) # TODO: change the model to GCN
         cla_path = os.path.join(self.cla_dir, self.classifier, '{}_lenet.ckpt'.format(self.cla_iters))
         C.load_state_dict(torch.load(cla_path, map_location=lambda storage, loc: storage))
 

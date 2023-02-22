@@ -309,16 +309,25 @@ class GraphRNN(nn.Module):
             epoch = 1
 
     # ====Call these in training loop====
-    def init_optimizer(self):
+    def init_optimizer(self, lr):
         """Initialize optimizers and schedular for both RNNs"""
-        self.optimizer_rnn = optim.Adam(list(self.rnn.parameters()), lr=self.args.lr)
-        self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=self.args.lr)
-        self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=self.args.milestones, gamma=self.args.lr_rate)
-        self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=self.args.milestones, gamma=self.args.lr_rate)
+        self.optimizer_rnn = optim.Adam(list(self.rnn.parameters()), lr=lr)
+        self.optimizer_output = optim.Adam(list(self.output.parameters()), lr=lr)
+        self.scheduler_rnn = MultiStepLR(self.optimizer_rnn, milestones=self.args.milestones)
+        self.scheduler_output = MultiStepLR(self.optimizer_output, milestones=self.args.milestones)
+        return self.optimizer_rnn, self.optimizer_output, self.scheduler_rnn, self.scheduler_output
 
     def clear_gradient_models(self):
         self.rnn.zero_grad()
         self.output.zero_grad()
+
+    def train(self, flag):
+        if flag:
+            self.rnn.train(True)
+            self.output.train(True)
+        else:
+            self.rnn.train(False)
+            self.output.train(False)
 
     def clear_gradient_opts(self):
         self.optimizer_rnn.zero_grad()
@@ -364,37 +373,39 @@ class GraphRNN(nn.Module):
         batch_size = x_unsorted.size(0)
         return x, y, output_x, output_y, y_len, output_y_len, batch_size
 
-    def forward(self, X, Y, length):
-        sorted_x, sorted_y, sorted_output_x, sorted_output_y, y_len, output_y_len, batch_size = self.sort_data_per_epoch(X, Y, length)
-        # init hidden for rnn
-        self.rnn.hidden = self.rnn.init_hidden(batch_size=batch_size)
-        # rnn pass
-        h = self.rnn(sorted_x, pack=True, input_len=y_len)
-        h = pack_padded_sequence(h, y_len, batch_first=True)
-        # reverse hidden
-        idx = [i for i in range(h.size(0) - 1, -1, -1)]
-        idx = Variable(torch.LongTensor(idx)).to(self.device)
-        h = h.index_select(0, idx)
-        hidden_null = Variable(torch.zeros(self.args.num_layers-1, h.size(0), h.size(1))).to(self.device)
-        # init hidden for output
-        self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
-        # output pass
-        y_pred = self.output(sorted_output_x, pack=True, input_len=output_y_len)
-        y_pred = F.sigmoid(y_pred)
-        # clean
-        y_pred = pack_padded_sequence(y_pred, output_y_len, batch_first=True)
-        y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
-        sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
-        sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
-        return y_pred, sorted_output_y
+    # def forward(self, noise, X, Y, length):
+    #     sorted_x, sorted_y, sorted_output_x, sorted_output_y, y_len, output_y_len, batch_size = self.sort_data_per_epoch(X, Y, length)
+    #     # init hidden for rnn
+    #     self.rnn.hidden = torch.stack(self.rnn.num_layers*[noise]).to(self.device)
+    #     # rnn pass
+    #     h = self.rnn(sorted_x, pack=True, input_len=y_len)
+    #     h = pack_padded_sequence(h, y_len, batch_first=True).data
+    #     # reverse hidden
+    #     idx = [i for i in range(h.size(0) - 1, -1, -1)]
+    #     idx = Variable(torch.LongTensor(idx)).to(self.device)
+    #     h = h.index_select(0, idx)
+    #     hidden_null = Variable(torch.zeros(self.args.num_layers-1, h.size(0), h.size(1))).to(self.device)
+    #     # init hidden for output
+    #     self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
+    #     # output pass
+    #     y_pred = self.output(sorted_output_x, pack=True, input_len=output_y_len)
+    #     y_pred = F.sigmoid(y_pred) #TODO: do we want to sigmoid?
+    #     # clean
+    #     y_pred = pack_padded_sequence(y_pred, output_y_len, batch_first=True)
+    #     y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
+    #     sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
+    #     sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
+    #     print(y_pred.shape)
+    #     return decode_adj(y_pred), decode_adj(sorted_output_y)
 
-    def generate(self, X, args, test_batch_size=1):
+    def forward(self, X, args, output_batch_size=1):
         """
         X: noise/latent vector
         args: arguments dictionary
         test_batch_size: number of graphs you want to generate
         """
         # provide a option to change number of graphs generated
+<<<<<<< HEAD
         if test_batch_size is None:
             test_batch_size = args.test_batch_size
 
@@ -403,11 +414,17 @@ class GraphRNN(nn.Module):
         # print(X.shape)
         # return
         self.rnn.hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
+=======
+        if output_batch_size is None:
+            output_batch_size = args.test_batch_size
+        input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
+        self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
+>>>>>>> 7e190e8e23464940be46fc40c74cc98be6bd7b85
 
         # TODO: change this part to noise vector might need resizing
-        y_pred_long = Variable(torch.zeros(test_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
+        y_pred_long = Variable(torch.zeros(output_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
         # x_step = X.to(self.device) # shape:(batch_size, 1, args.max_prev_node)
-        x_step = Variable(torch.ones(test_batch_size, 1, args.max_prev_node)).to(self.device)
+        x_step = Variable(torch.ones(output_batch_size, 1, args.max_prev_node)).to(self.device)
 
         # iterative graph generation
         for i in range(args.max_num_node):
@@ -418,8 +435,8 @@ class GraphRNN(nn.Module):
             # (1)
             h = self.rnn(x_step)
             hidden_null = Variable(torch.zeros(args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
-            x_step = Variable(torch.zeros(test_batch_size, 1, args.max_prev_node)).to(self.device)
-            output_x_step = Variable(torch.ones(test_batch_size, 1, 1)).to(self.device)
+            x_step = Variable(torch.zeros(output_batch_size, 1, args.max_prev_node)).to(self.device)
+            output_x_step = Variable(torch.ones(output_batch_size, 1, 1)).to(self.device)
             # (2)
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
             for j in range(min(args.max_prev_node,i+1)):
@@ -432,6 +449,7 @@ class GraphRNN(nn.Module):
             self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
 
+<<<<<<< HEAD
         # TODO: check my work, I am commenting this part out because we don't want graph objects, we want adj_matrix
         # # collect the graphs
         # G_pred_list = []
@@ -446,3 +464,13 @@ class GraphRNN(nn.Module):
             adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
             adj_pred_list.append(adj_pred)
         return adj_pred_list
+=======
+        adj_pred_list = []
+        for i in range(output_batch_size):
+            adj_pred = decode_adj(y_pred_long_data[i].cpu().numpy())
+            # adj_pred_list = np.append(adj_pred_list, adj_pred)
+            adj_pred_list.append(adj_pred)
+
+        return torch.Tensor(np.array(adj_pred_list))
+
+>>>>>>> 7e190e8e23464940be46fc40c74cc98be6bd7b85
