@@ -409,9 +409,7 @@ class GraphRNN(nn.Module):
         input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
         self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
 
-        # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(output_batch_size, self.args.max_num_node, self.args.max_prev_node)).to(self.device) # discrete prediction
-        # x_step = X.to(self.device) # shape:(batch_size, 1, self.args.max_prev_node)
         x_step = Variable(torch.ones(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
 
         # iterative graph generation
@@ -422,20 +420,23 @@ class GraphRNN(nn.Module):
 
             # (1)
             h = self.rnn(x_step)
+            # print('h grad: ', h.grad)
             hidden_null = Variable(torch.zeros(self.args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
             x_step = Variable(torch.zeros(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
             output_x_step = Variable(torch.ones(output_batch_size, 1, 1)).to(self.device)
+
             # (2)
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
             for j in range(min(self.args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
-                # print(output_y_pred_step.requires_grad)
+                # print('output y grad: ', output_y_pred_step.grad)
                 output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
                 # self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step
             # self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
+        # print("y pred grad: ", y_pred_long_data.grad)
 
         init_adj_pred = decode_adj(y_pred_long_data[0].cpu())
         adj_pred_list = torch.zeros((output_batch_size, init_adj_pred.size(0), init_adj_pred.size(1)))
@@ -446,5 +447,6 @@ class GraphRNN(nn.Module):
             adj_pred_list[i, :, :] = decode_adj(y_pred_long_data[i].cpu())
 
         # return torch.Tensor(np.array(adj_pred_list))
+        adj_pred_list.requires_grad = True
         return adj_pred_list
 

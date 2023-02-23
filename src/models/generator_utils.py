@@ -314,7 +314,6 @@ def decode_adj(adj_output):
     n = adj_full.shape[0]
     adj_full[1:n, 0:n-1] = torch.tril(adj, 0)
     adj_full = adj_full + adj_full.T
-
     return adj_full
 
 def get_graph(adj):
@@ -431,8 +430,7 @@ def test_rnn_epoch(epoch, args, rnn, output, test_batch_size=16):
         h = rnn(x_step)
         # output.hidden = h.permute(1,0,2)
         hidden_null = Variable(torch.zeros(args.num_layers - 1, h.size(0), h.size(2))).to(choose_device())
-        output.hidden = torch.cat((h.permute(1,0,2), hidden_null),
-                                  dim=0)  # num_layers, batch_size, hidden_size
+        output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0)  # num_layers, batch_size, hidden_size
         x_step = Variable(torch.zeros(test_batch_size,1,args.max_prev_node)).to(choose_device())
         output_x_step = Variable(torch.ones(test_batch_size,1,1)).to(choose_device())
         for j in range(min(args.max_prev_node,i+1)):
