@@ -20,7 +20,7 @@ from collections import OrderedDict
 import math
 import numpy as np
 import time as tm
-from .args import *
+from args import *
 
 
 def choose_device():
