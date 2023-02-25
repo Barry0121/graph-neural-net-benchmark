@@ -358,37 +358,37 @@ class Graph_sequence_sampler_pytorch(torch.utils.data.Dataset): # param: G_list,
             args.max_prev_node = self.max_prev_node
         else:
             self.max_prev_node = max_prev_node
+        # get padded size
+        _, test_y, _ = self.process_adj(self.adj_all[0])
+        self.adj_shape = decode_adj(test_y).shape
 
-        # self.max_prev_node = max_prev_node
-
-        # # sort Graph in descending order
-        # len_batch_order = np.argsort(np.array(self.len_all))[::-1]
-        # self.len_all = [self.len_all[i] for i in len_batch_order]
-        # self.adj_all = [self.adj_all[i] for i in len_batch_order]
-    def __len__(self):
-        return len(self.adj_all)
-    def __getitem__(self, idx):
-        adj_copy = self.adj_all[idx].copy()
-
+    def process_adj(self, adj):
         x_batch = np.zeros((self.n, self.max_prev_node))  # here zeros are padded for small graph
         x_batch[0,:] = 1 # the first input token is all ones
         y_batch = np.zeros((self.n, self.max_prev_node))  # here zeros are padded for small graph
         # generate input x, y pairs
-        len_batch = adj_copy.shape[0]
-        x_idx = np.random.permutation(adj_copy.shape[0])
-        adj_copy = adj_copy[np.ix_(x_idx, x_idx)]
-        adj_copy_matrix = np.asmatrix(adj_copy)
+        len_batch = adj.shape[0]
+        x_idx = np.random.permutation(adj.shape[0])
+        adj = adj[np.ix_(x_idx, x_idx)]
+        adj_copy_matrix = np.asmatrix(adj)
         G = nx.from_numpy_matrix(adj_copy_matrix)
         # then do bfs in the permuted G
-        start_idx = np.random.randint(adj_copy.shape[0])
+        start_idx = np.random.randint(adj.shape[0])
         x_idx = np.array(bfs_seq(G, start_idx))
-        adj_copy = adj_copy[np.ix_(x_idx, x_idx)]
-        adj_encoded = encode_adj(adj_copy.copy(), max_prev_node=self.max_prev_node)
+        adj = adj[np.ix_(x_idx, x_idx)]
+        adj_encoded = encode_adj(adj.copy(), max_prev_node=self.max_prev_node)
         # get x and y and adj
         # for small graph the rest are zero padded
         y_batch[0:adj_encoded.shape[0], :] = adj_encoded
         x_batch[1:adj_encoded.shape[0] + 1, :] = adj_encoded
-        return {'x':x_batch,'y':y_batch, 'adj_mat':decode_adj(y_batch), 'label':self.label_all[idx],'len':len_batch}
+        return x_batch, y_batch, len_batch
+
+    def __len__(self):
+        return len(self.adj_all)
+    def __getitem__(self, idx):
+        adj_copy = self.adj_all[idx].copy()
+        x_batch, y_batch, len_batch = self.process_adj(adj_copy)
+        return {'x':x_batch,'y':y_batch,'len':len_batch,'adj_mat':decode_adj(y_batch),'label':self.label_all[idx]}
 
     def calc_max_prev_node(self, iter=20000,topk=10):
         max_prev_node = []
@@ -423,7 +423,8 @@ def get_dataloader_train(dataset, args, num_workers=0):
 
 def get_dataloader_labels(dataset, args, num_workers=0):
     """Dataloader for generating adversary"""
-    return torch.utils.data.DataLoader(dataset,  batch_size=args.batch_size, num_workers=num_workers)
+    adj_shape = dataset.adj_shape
+    return torch.utils.data.DataLoader(dataset,  batch_size=args.batch_size, num_workers=num_workers), adj_shape
 
 # args = Args()
 # dataset = get_dataset_with_label(args.graph_type)

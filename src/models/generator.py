@@ -12,7 +12,7 @@ from torch.autograd import Variable
 from torch import optim
 import torch.nn.functional as F
 import torch.nn.init as init
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence, pad_sequence
 from torch.optim.lr_scheduler import MultiStepLR
 
 from collections import OrderedDict
@@ -342,63 +342,157 @@ class GraphRNN(nn.Module):
     # ======================================
 
     def sort_data_per_epoch(self, X, Y, length):
+        # print("Sort Data...")
         x_unsorted = X.float()
         y_unsorted = Y.float()
         y_len_unsorted = length
         y_len_max = max(y_len_unsorted)
-        x_unsorted = x_unsorted[:, 0:y_len_max, :]
-        y_unsorted = y_unsorted[:, 0:y_len_max, :]
+        # batch-wise clear padding
+        # x_unsorted = x_unsorted[:, 0:y_len_max, :]
+        # y_unsorted = y_unsorted[:, 0:y_len_max, :]
+        # print("y unsorted size: ", y_unsorted.size())
+
+        # sort traget (y) by adj_vector size
         y_len,sort_index = torch.sort(y_len_unsorted,0,descending=True)
-        y_len = y_len.numpy().tolist()
+        # y_len = y_len.numpy().tolist()
         x = torch.index_select(x_unsorted,0,sort_index)
         y = torch.index_select(y_unsorted,0,sort_index)
-        y_reshape = pack_padded_sequence(y,y_len,batch_first=True).data
+        y_len = [y.size(1) for _ in range(y.size(0))] # use uniform length
+        # print("y sorted size: ", y.size())
+
+        # create packed seqeunce to pass into the GRU model
+        # print('y len size: ', len(y_len))
+        # print('y len: ', y_len)
+        y_reshape = pack_padded_sequence(y,y_len,batch_first=True).data # This line changes the y shape by stacking across batch vertically
+        # print(y_reshape.size())  #( batch*(node, max_prev_node)
+        # y_reshape = y
         idx = [i for i in range(y_reshape.size(0)-1, -1, -1)]
         idx = torch.LongTensor(idx)
         y_reshape = y_reshape.index_select(0, idx)
+        # print(y_reshape.shape) #( batch*node, max_prev_node)
         y_reshape = y_reshape.view(y_reshape.size(0),y_reshape.size(1),1)
+        # print(y_reshape.shape) #( batch*node, max_prev_node, 1)
         output_x = torch.cat((torch.ones(y_reshape.size(0),1,1),y_reshape[:,0:-1,0:1]),dim=1) # x's shape is determined by y's shape
+        # print('output x shape: ', output_x.shape) #( batch*node, max_prev_node)
         output_y = y_reshape
-        output_y_len = []
-        output_y_len_bin = np.bincount(np.array(y_len))
-        for i in range(len(output_y_len_bin)-1,0,-1):
-            count_temp = np.sum(output_y_len_bin[i:]) # count how many y_len is above i
-            output_y_len.extend([min(i,y.size(2))]*count_temp) # put them in output_y_len; max value should not exceed y.size(2)
-
+        # print('output y shape: ', output_y.shape)
+        output_x_len = []
+        output_x_len_bin = np.bincount(np.array(y_len))
+        for i in range(len(output_x_len_bin)-1,0,-1):
+            count_temp = np.sum(output_x_len_bin[i:]) # count how many y_len is above i
+            output_x_len.extend([min(i,y.size(2))]*count_temp) # put them in output_x_len; max value should not exceed y.size(2)
+        # print('output_x_len: ', output_x_len)
         # pack into variable
         x = Variable(x).to(self.device)
         y = Variable(y).to(self.device)
         output_x = Variable(output_x).to(self.device)
         output_y = Variable(output_y).to(self.device)
         batch_size = x_unsorted.size(0)
-        return x, y, output_x, output_y, y_len, output_y_len, batch_size
+        # print("sorted batch size: ", batch_size)
+        return x, y, output_x, output_y, y_len, output_x_len, batch_size
 
-    # def forward(self, noise, X, Y, length):
-    #     sorted_x, sorted_y, sorted_output_x, sorted_output_y, y_len, output_y_len, batch_size = self.sort_data_per_epoch(X, Y, length)
-    #     # init hidden for rnn
+    def forward(self, noise, X, Y, length):
+        """
+        X: noise/latent vector
+        args: arguments dictionary
+        test_batch_size: number of graphs you want to generate
+        """
+        # provide a option to change number of graphs generated
+        output_batch_size = self.args.test_batch_size
+        input_hidden = torch.stack(self.rnn.num_layers*[noise]).to(self.device)
+        self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
+        # print("X shape: ", X.shape)
+        x, y, output_x, output_y, y_len, output_x_len, _ = self.sort_data_per_epoch(X, Y, length)
+        # print("Forward pass...")
+        # print("output y len :", len(output_x_len))
+        # print("ouput_x shape: ", output_x.size())
+        h = self.rnn(x, pack=True, input_len=y_len)
+        # print('h shape: ', h.shape) # (batch, padded, y_len)
+        # TEST: keep the pack_padded_sequence object as input
+        h = pack_padded_sequence(h,y_len, batch_first=True).data # get packed hidden vector
+        # print('padded h shape: ', h.shape)
+        # reverse h
+        idx = [i for i in range(h.size(0) - 1, -1, -1)]
+        idx = Variable(torch.LongTensor(idx)).cuda()
+        h = h.index_select(0, idx)
+        hidden_null = Variable(torch.zeros(self.rnn.num_layers-1, h.size(0), h.size(1))).cuda()
+        # print('hidden null shape: ', hidden_null.shape)
+        self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)),hidden_null),dim=0) # num_layers, batch_size, hidden_size
+        # print("ouptut x shape: ", output_x.shape)
+        y_pred = self.output(output_x, pack=True, input_len=output_x_len)
+        y_pred = torch.sigmoid(y_pred)
+        # print("y_pred shape (1) : ", y_pred.shape)
+        # clean
+        y_pred = pack_padded_sequence(y_pred, output_x_len, batch_first=True)
+        y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
+        # print("y_pred shape (2) : ", y_pred.shape)
+        # print("output y len sum: ", sum(output_x_len))
+        # out = decode_adj(y_pred)
+        y_output = y_pred[:, :, 0]
+        y_output = y_output.reshape(X.size(0), X.size(1), X.size(2))
+        # print(y_output.size())
+        y_output_adj = torch.stack([decode_adj(op) for op in y_output])
+        # print(y_output_adj.size())
+        return y_output_adj
+
+    # this is for testing only
+    # def forwardv2(self, noise, X, Y, length):
+    #     """
+    #     noise: noise/latent vector
+    #     X: modified sequenced adjcency vectors (with global padding)
+    #     Y: original seuqneced adjcency vectors (with global padding)
+    #     length: length of each adjcency vectors
+    #     """
+    #     # Get self.rnn input (sort data, filter by max, etc)
+    #     x_unsorted = X.float()
+    #     y_unsorted = Y.float()
+    #     y_len_unsorted = length
+
+    #     # sort by length
+    #     y_len,sort_index = torch.sort(y_len_unsorted,0,descending=True)
+    #     # y_len = y_len.numpy().tolist()
+    #     x = torch.index_select(x_unsorted,0,sort_index)
+    #     y = torch.index_select(y_unsorted,0,sort_index)
+    #     output_x = torch.cat((torch.ones(y.size(0),1,1),y[:,0:-1,0:1]),dim=1) # x's shape is determined by y's shape
+    #     print(output_x.size(), y.size())
+
+    #     # # output_x_len is needed to count self.output forward output length
+    #     # output_x_len = []
+    #     # output_x_len_bin = np.bincount(np.array(y_len))
+    #     # for i in range(len(output_x_len_bin)-1,0,-1):
+    #     #     count_temp = np.sum(output_x_len_bin[i:]) # count how many y_len is above i
+    #     #     output_x_len.extend([min(i,y.size(2))]*count_temp) # put them in output_x_len; max value should not exceed y.size(2)
+
+    #     #TODO: might need more transformation, but I don't know how to add them without breaking the pack_padded_sequence object
+
+    #     # pack them to the right device
+    #     x = x.to(self.device)
+    #     y = y.to(self.device)
+    #     output_x = output_x.to(self.device)
+
+    #     # now for the self.rnn forward
     #     self.rnn.hidden = torch.stack(self.rnn.num_layers*[noise]).to(self.device)
-    #     # rnn pass
-    #     h = self.rnn(sorted_x, pack=True, input_len=y_len)
-    #     h = pack_padded_sequence(h, y_len, batch_first=True).data
-    #     # reverse hidden
+    #     h = self.rnn(x, pack=False)
+    #     # print("h.shape: ", h.shape)
+
+    #     # create self.output's hidden vector from self.rnn's output h
+    #     # h = pad_sequence(h, batch_first=True) # now the input and output would have the same shape as output_x and output_y
+    #     h = pack_padded_sequence(h, [h.size(1) for _ in range(h.size(0))], batch_first=True).data # this essentially flatten the first two dimension of h
+    #     # print('hidden size: ', self.args.hidden_size_rnn_output)
+    #     print("h.shape: ", h.size())
+    #     # reverse and pad h (not sure how this will influence the output)
     #     idx = [i for i in range(h.size(0) - 1, -1, -1)]
     #     idx = Variable(torch.LongTensor(idx)).to(self.device)
     #     h = h.index_select(0, idx)
-    #     hidden_null = Variable(torch.zeros(self.args.num_layers-1, h.size(0), h.size(1))).to(self.device)
-    #     # init hidden for output
-    #     self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)), hidden_null),dim=0) # num_layers, batch_size, hidden_size
-    #     # output pass
-    #     y_pred = self.output(sorted_output_x, pack=True, input_len=output_y_len)
-    #     y_pred = F.sigmoid(y_pred) #TODO: do we want to sigmoid?
-    #     # clean
-    #     y_pred = pack_padded_sequence(y_pred, output_y_len, batch_first=True)
-    #     y_pred = pad_packed_sequence(y_pred, batch_first=True)[0]
-    #     sorted_output_y = pack_padded_sequence(sorted_output_y, output_y_len, batch_first=True)
-    #     sorted_output_y = pad_packed_sequence(sorted_output_y, batch_first=True)[0]
-    #     print(y_pred.shape)
-    #     return decode_adj(y_pred), decode_adj(sorted_output_y)
+    #     hidden_null = Variable(torch.zeros(self.rnn.num_layers-1, h.size(0), h.size(1))).to(self.device)
+    #     self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)),hidden_null),dim=0)
 
-    def forward(self, X):
+    #     # for the self.output forward
+    #     y_pred = self.output(output_x, pack=False)
+    #     print("y_pred.shape: ", y_pred.size())
+    #     return
+
+    def generate(self, X):
         """
         X: noise/latent vector
         args: arguments dictionary
@@ -409,9 +503,7 @@ class GraphRNN(nn.Module):
         input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
         self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
 
-        # TODO: change this part to noise vector might need resizing
         y_pred_long = Variable(torch.zeros(output_batch_size, self.args.max_num_node, self.args.max_prev_node)).to(self.device) # discrete prediction
-        # x_step = X.to(self.device) # shape:(batch_size, 1, self.args.max_prev_node)
         x_step = Variable(torch.ones(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
 
         # iterative graph generation
@@ -422,20 +514,23 @@ class GraphRNN(nn.Module):
 
             # (1)
             h = self.rnn(x_step)
+            # print('h grad: ', h.grad)
             hidden_null = Variable(torch.zeros(self.args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
             x_step = Variable(torch.zeros(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
             output_x_step = Variable(torch.ones(output_batch_size, 1, 1)).to(self.device)
+
             # (2)
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
             for j in range(min(self.args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
-                # print(output_y_pred_step.requires_grad)
+                # print('output y grad: ', output_y_pred_step.grad)
                 output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
                 # self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step
             # self.rnn.hidden = Variable(self.rnn.hidden.data).to(self.device)
         y_pred_long_data = y_pred_long.data.long()
+        # print("y pred grad: ", y_pred_long_data.grad)
 
         init_adj_pred = decode_adj(y_pred_long_data[0].cpu())
         adj_pred_list = torch.zeros((output_batch_size, init_adj_pred.size(0), init_adj_pred.size(1)))
@@ -446,5 +541,6 @@ class GraphRNN(nn.Module):
             adj_pred_list[i, :, :] = decode_adj(y_pred_long_data[i].cpu())
 
         # return torch.Tensor(np.array(adj_pred_list))
+        adj_pred_list.requires_grad = True
         return adj_pred_list
 
