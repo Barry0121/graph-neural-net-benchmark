@@ -42,17 +42,18 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     # get the dataset
     train, labels = get_dataset_with_label(args.graph_type) # entire dataset as train
     train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
-    train_loader = get_dataloader_labels(train_dataset, args)
+    train_loader, adj_shape = get_dataloader_labels(train_dataset, args)
     noise_dim = args.hidden_size_rnn
     print('noise dimension is: ', noise_dim)
+    print('padded adjacency matrix shape is: ', adj_shape)
 
     # initialize noise, optimizer and loss
     netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     netG = GraphRNN(args=args)
     # netG_rnn = netG.rnn
     # netG_output = netG.output
-    netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
-    # netD = SimpleNN(621, 1)
+    # netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
+    netD = TestNN(adj_shape[0]*adj_shape[1], 1) # matching dimension of Graph2Vec
 
     # ======Testing=======
     # set up a register_hook to check parameter gradient)
@@ -95,28 +96,30 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             adj_mat = data['adj_mat']
             label = data['label']
             Y_len = data['len']
-
             # zero grad
             optimizerI.zero_grad()
             optimizerD.zero_grad()
-            # optimizerG.zero_grad()
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
-            # netG.clear_gradient_opts()
-            # netG.clear_gradient_models()
+
             # skip uneven batch
             if adj_mat.size(0) != args.batch_size:
                 continue
+
+            # fit graph2vec
+            graph2vec.fit([nx.from_numpy_matrix(decode_adj(y).numpy()) for y in Y])
 
             ######################
             # Discriminator Update
             ######################
             # number of iteration to train the discriminator
-            Diters = 10
+            Diters = 5
             j = 0 # counter for 1, 2, ... Diters
             # enable training
-            netD.train(True)
-            netG.train(False)
+            netD.train()
+            # for param in netG.parameters():
+            #     param.requires_grad = False
+            netG.eval()
             b_errD = 0
             while j < Diters:
                 j += 1
@@ -127,18 +130,20 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
                 # train with real
                 inputs = torch.clone(adj_mat)
-                D_pred = netD(inputs)
-                errD_real = D_pred
+                # print("netD input shape: ", inputs.dtype)
+                D_pred = netD(inputs.to(torch.float32))
+                errD_real = torch.mean(D_pred)
                 errD_real.backward() # discriminator should assign 1's to true samples
 
                 # train with fake
                 noise = torch.randn(args.batch_size, noise_dim) # (batch_size, hidden_size)
                 # insert data processing
-                # print(X.shape, Y.shape)
-                fake = netG(noise, X, Y, Y_len)
+                with torch.no_grad():
+                    fake = netG(noise, X, Y, Y_len)
+                # embed = graph2vec.infer([nx.from_numpy_matrix(f.detach().numpy()) for f in fake])
                 fake_tensor = netD(fake)
-                errD_fake = fake_tensor
-                errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
+                errD_fake = -1*torch.mean(fake_tensor)
+                errD_fake.backward() # discriminator should assign -1's to fake samples??
 
                 # compute Wasserstein distance and update parameters
                 errD = errD_real - errD_fake
@@ -148,19 +153,18 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 b_errD += errD
 
             # ========== Train Generator ==================
-            netD.train(False)
+            netD.eval()
             netG.train(True)
-            # netG.clear_gradient_models()
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
             noisev = torch.randn(args.batch_size, noise_dim)
-            fake = netG(noisev, X, Y, Y_len)
+            fake = netG(noisev, X, Y, Y_len) # return adjs
             fake_tensor = netD(fake)
-            errG = fake_tensor
+            errG = torch.mean(fake_tensor)
             errG.backward()
             G_optimizer_rnn.step()
             G_optimizer_output.step()
-            # netG.all_steps()
+
 
 
             # Winston's outline for inverter training
@@ -244,7 +248,6 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
 
 args = Args()
-
 # ===============Test BFS DataLoader==================
 # graphs, labels = get_dataset_with_label('MUTAG')
 # dataset = Graph_sequence_sampler_pytorch(graphs, labels, args=args)

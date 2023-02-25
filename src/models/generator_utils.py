@@ -309,7 +309,8 @@ def decode_adj(adj_output):
         input_end = i + 1
         output_start = max_prev_node + max(0, i - max_prev_node + 1) - (i + 1)
         output_end = max_prev_node
-        adj[i, input_start:input_end] = reverse_adj[i,output_start:output_end][:, 0]
+        # adj[i, input_start:input_end] = reverse_adj[i,output_start:output_end][:, 0]
+        adj[i, input_start:input_end] = reverse_adj[i,output_start:output_end]
     adj_full = torch.zeros((adj_output.shape[0]+1, adj_output.shape[0]+1))
     n = adj_full.shape[0]
     adj_full[1:n, 0:n-1] = torch.tril(adj, 0)
