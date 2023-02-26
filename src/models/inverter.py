@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import time
+import tqdm as tqdm
 from scipy.stats import wasserstein_distance
 from karateclub import Graph2Vec
 from torch_geometric.datasets import TUDataset
