@@ -524,7 +524,7 @@ class GraphRNN(nn.Module):
             for j in range(min(self.args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
                 # print('output y grad: ', output_y_pred_step.grad)
-                output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
+                # output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
                 x_step[:,:,j:j+1] = output_x_step
                 # self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step
@@ -541,6 +541,6 @@ class GraphRNN(nn.Module):
             adj_pred_list[i, :, :] = decode_adj(y_pred_long_data[i].cpu())
 
         # return torch.Tensor(np.array(adj_pred_list))
-        adj_pred_list.requires_grad = True
+        # adj_pred_list.requires_grad = True
         return adj_pred_list
 
