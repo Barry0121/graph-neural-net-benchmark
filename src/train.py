@@ -57,8 +57,10 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     # ======Testing=======
     # set up a register_hook to check parameter gradient)
-    # hd = list(netD.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update with gradient {grad}"))
-    # hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update with gradient {grad}"))
+    # hd = list(netD.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update.."))
+    # hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update.."))
+    # if train_inverter:
+    #     hi = list(netI.parameters())[0].register_hook(lambda grad: print(f"NetI parameter Update.."))
 
     # ======Testing=======
     # check model parameters
@@ -86,11 +88,12 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     one = torch.tensor(1, dtype=torch.float)
     mone = torch.tensor(-1, dtype=torch.float)
 
-    for e in range(args.epochs):
+    for e in tqdm(range(args.epochs), desc=f"Training...", total=args.epochs):
         # for now, treat the input as adj matrices
         start_time = time.time()
         e_errI, e_errD, e_errG, count_batch = 0, 0, 0, 0
-        for i, data in tqdm(enumerate(train_loader), desc=f"Training epoch#{e+1}", total=len(train_loader)):
+        # for i, data in tqdm(enumerate(train_loader), desc=f"Training epoch#{e+1}", total=len(train_loader)):
+        for i, data in enumerate(train_loader):
             X = data['x']
             Y = data['y']
             adj_mat = data['adj_mat']
@@ -132,7 +135,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 inputs = torch.clone(adj_mat)
                 # print("netD input shape: ", inputs.dtype)
                 D_pred = netD(inputs.to(torch.float32))
-                errD_real = torch.mean(D_pred)
+                errD_real = D_pred
                 errD_real.backward() # discriminator should assign 1's to true samples
 
                 # train with fake
@@ -142,7 +145,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                     fake = netG(noise, X, Y, Y_len)
                 # embed = graph2vec.infer([nx.from_numpy_matrix(f.detach().numpy()) for f in fake])
                 fake_tensor = netD(fake)
-                errD_fake = -1*torch.mean(fake_tensor)
+                errD_fake = -1*fake_tensor
                 errD_fake.backward() # discriminator should assign -1's to fake samples??
 
                 # compute Wasserstein distance and update parameters
@@ -160,7 +163,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             noisev = torch.randn(args.batch_size, noise_dim)
             fake = netG(noisev, X, Y, Y_len) # return adjs
             fake_tensor = netD(fake)
-            errG = torch.mean(fake_tensor)
+            errG = -1*fake_tensor
             errG.backward()
             G_optimizer_rnn.step()
             G_optimizer_output.step()
@@ -177,20 +180,24 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
             # ========== Train Inverter =================
             if train_inverter:
-                original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
+                netG.eval()
+                netI.train(True)
+                original_graphs = adj_mat
                 graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in adj_mat]
                 # retrain graph2vec
                 graph2vec.fit(graph_lst)
                 # genearte embedding
                 embeddings = torch.Tensor(graph2vec.infer(graph_lst))
                 I_output = netI(torch.reshape(embeddings, (embeddings.shape[0], -1)))
-                # print(I_output.shape)
-                G_pred_graphs = netG(X=I_output, args=args, output_batch_size=args.batch_size)
+                with torch.no_grad():
+                    G_pred_graphs = netG(I_output, X, Y, Y_len)
                 reconst_graphs = G_pred_graphs
+
                 # noise
-                G_pred_noise = netG(X=noise, args=args, output_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
-                # print(G_pred_noise.shape)
-                noise_graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in G_pred_noise]
+                noise = torch.randn(args.batch_size, noise_dim)
+                with torch.no_grad():
+                    G_pred_noise = netG(noise, X, Y, Y_len)
+                noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
                 noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
                 reconst_noise = netI(noise_embeddings)
                 # compute loss and update inverter loss
@@ -198,7 +205,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 reconst_graphs = reconst_graphs.to(device)
                 noise = noise.to(device)
                 reconst_noise = reconst_noise.to(device)
-                iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
+                iloss = lossI(original_graphs.float(), reconst_graphs.float(), noise.float(), reconst_noise.float()).float()
                 iloss.backward()
                 optimizerI.step()
 
@@ -210,16 +217,16 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             count_batch += 1
 
         # Print out training information per epoch.
-        if train_inverter:
-            if (e+1) % 1 == 0:
-                elapsed_time = time.time() - start_time
-                print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
-                    elapsed_time, e+1, args.epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
-        else:
-            if (e+1) % 1 == 0:
-                elapsed_time = time.time() - start_time
-                print('Elapsed time [{:.4f}], Iteration [{}/{}], D Loss: {:.4f}, G Loss {:.4f}'.format(
-                    elapsed_time, e+1, args.epochs, e_errD/count_batch, e_errG/count_batch))
+        # if train_inverter:
+        #     if (e+1) % 1 == 0:
+        #         elapsed_time = time.time() - start_time
+        #         print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
+        #             elapsed_time, e+1, args.epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
+        # else:
+        #     if (e+1) % 1 == 0:
+        #         elapsed_time = time.time() - start_time
+        #         print('Elapsed time [{:.4f}], Iteration [{}/{}], D Loss: {:.4f}, G Loss {:.4f}'.format(
+        #             elapsed_time, e+1, args.epochs, e_errD/count_batch, e_errG/count_batch))
 
 
         # append training loss across
@@ -262,4 +269,4 @@ args = Args()
 #     break
 
 # ===============Test training function================
-train(args=args)
+train(args=args, train_inverter=True)

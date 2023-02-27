@@ -128,4 +128,4 @@ class TestNN(nn.Module):
         param x: the vector representing a certain statistic
         """
         x = self.reduce(x)
-        return self.act(x)
+        return torch.mean(self.act(x))

@@ -69,7 +69,7 @@ class Args():
         ### training config
         self.num_workers = 0 # num workers to load data, default 4
         self.batch_ratio = 32 # how many batches of samples per epoch, default 32, e.g., 1 epoch = 32 batches
-        self.epochs = 50 # now one epoch means self.batch_ratio x batch_size
+        self.epochs = 500 # now one epoch means self.batch_ratio x batch_size
         self.epochs_test_start = 100
         self.epochs_test = 100
         self.epochs_log = 100
@@ -82,7 +82,7 @@ class Args():
         self.sample_time = 2 # sample time in each time step, when validating
 
         ### output config
-        # self.dir_input = "/dfs/scratch0/jiaxuany0/"
+        # TODO: change dir_input for a new path to save the model and result
         self.dir_input = "../cache/graphRNN/"
         self.model_save_path = self.dir_input+'model_save/' # only for nll evaluation
         self.graph_save_path = self.dir_input+'graphs/'
