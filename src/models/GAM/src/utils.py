@@ -7,6 +7,7 @@ import numpy as np
 import networkx as nx
 from tqdm import tqdm
 from texttable import Texttable
+from torch_geometric.datasets import TUDataset
 
 def tab_printer(args):
     """
@@ -20,28 +21,35 @@ def tab_printer(args):
     t.add_rows([[k.replace("_", " ").capitalize(), args[k]] for k in keys])
     print(t.draw())
 
-def read_node_labels(args):
-    """
-    Reading the graphs from disk.
-    :param args: Arguments object.
-    :return identifiers: Hash table of unique node labels in the dataset.
-    :return class_number: Number of unique graph classes in the dataset.
-    """
-    print("\nCollecting unique node labels.\n")
-    labels = set()
-    targets = set()
-    graphs = glob.glob(args.train_graph_folder + "*.json")
-    try:
-        graphs = graphs + glob.glob(args.test_graph_folder + "*.json")
-    except:
-        pass
-    for g in tqdm(graphs):
-        data = json.load(open(g))
-        labels = labels.union(set(list(data["labels"].values())))
-        targets = targets.union(set([data["target"]]))
+# def read_node_labels(args):
+#     """
+#     Reading the graphs from disk.
+#     :param args: Arguments object.
+#     :return identifiers: Hash table of unique node labels in the dataset.
+#     :return class_number: Number of unique graph classes in the dataset.
+#     """
+#     print("\nCollecting unique node labels.\n")
+#     labels = set()
+#     targets = set()
+#     graphs = glob.glob(args.train_graph_folder + "*.json")
+#     try:
+#         graphs = graphs + glob.glob(args.test_graph_folder + "*.json")
+#     except:
+#         pass
+#     for g in tqdm(graphs):
+#         data = json.load(open(g))
+#         labels = labels.union(set(list(data["labels"].values())))
+#         targets = targets.union(set([data["target"]]))
+#     identifiers = {label: i for i, label in enumerate(list(labels))}
+#     class_number = len(targets)
+#     print("\n\nThe number of graph classes is: "+str(class_number)+".\n")
+#     return identifiers, class_number
+
+def read_node_labels(args, dataset_name):
+    dataset = TUDataset('../../data/TUDataset', dataset_name)
+    labels = set(range(args.max_node_degree))
+    class_number = int(dataset.num_classes)
     identifiers = {label: i for i, label in enumerate(list(labels))}
-    class_number = len(targets)
-    print("\n\nThe number of graph classes is: "+str(class_number)+".\n")
     return identifiers, class_number
 
 def create_logs(args):

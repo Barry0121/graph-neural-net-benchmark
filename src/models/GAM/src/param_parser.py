@@ -8,7 +8,7 @@ def parameter_parser():
     The default hyperparameters give good results without cross-validation.
     """
     parser = argparse.ArgumentParser(description="Run GAM.")
-	
+
     parser.add_argument("--train-graph-folder",
                         nargs="?",
                         default="./input/train/",
@@ -73,5 +73,9 @@ def parameter_parser():
                         type=float,
                         default=10**-5,
 	                help="Learning rate. Default is 10^-5.")
+    parser.add_argument("--max-node-degree",
+                        type=int,
+                        default=100,
+	                help="Max degree of nodes in the dataset. Default is 100.")
 
     return parser.parse_args()

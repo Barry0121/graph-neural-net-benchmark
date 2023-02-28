@@ -13,6 +13,9 @@ from models.discriminator import *
 from models.generator import *
 from models.inverter import *
 
+from models.GAM.src.param_parser import *
+from models.GAM.src.gam import *
+
 from tqdm import tqdm
 import warnings
 
@@ -48,17 +51,22 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     print('padded adjacency matrix shape is: ', adj_shape)
 
     # initialize noise, optimizer and loss
+    netD_args = parameter_parser()
+    # print(netD_args)
+
+    # netD_args['dataset_name'] = args.graph_type
     netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     netG = GraphRNN(args=args)
     # netG_rnn = netG.rnn
     # netG_output = netG.output
     # netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
-    netD = TestNN(adj_shape[0]*adj_shape[1], 1) # matching dimension of Graph2Vec
+    # netD = TestNN(adj_shape[0]*adj_shape[1], 1) # matching dimension of Graph2Vec
+    netD = GAMTrainer(netD_args, args.graph_type)
 
     # ======Testing=======
     # set up a register_hook to check parameter gradient)
-    # hd = list(netD.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update.."))
-    # hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update.."))
+    hd = list(netD.model.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update.."))
+    hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update.."))
     # if train_inverter:
     #     hi = list(netI.parameters())[0].register_hook(lambda grad: print(f"NetI parameter Update.."))
 
@@ -73,7 +81,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     graph2vec = get_graph2vec(args.graph_type, dim=512) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(netI.parameters(), lr=lr)
-    optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=[betas for _ in range(2)])
+    optimizerD = optim.Adam(netD.model.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(device, lamb, loss_func)
     G_optimizer_rnn, G_optimizer_output, G_scheduler_rnn, G_scheduler_output = netG.init_optimizer(lr=0.1) # initialize optimizers
 
@@ -119,7 +127,8 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             Diters = 5
             j = 0 # counter for 1, 2, ... Diters
             # enable training
-            netD.train()
+            # netD.train()
+            netD.model.train(True)
             # for param in netG.parameters():
             #     param.requires_grad = False
             netG.eval()
@@ -127,47 +136,81 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             while j < Diters:
                 j += 1
                 # weight clipping: clamp parameters to a cube
-                for p in netD.parameters():
+                # for p in netD.parameters():
+                #     p.data.clamp_(clamp_lower, clamp_upper)
+                for p in netD.model.parameters():
                     p.data.clamp_(clamp_lower, clamp_upper)
-                netD.zero_grad()
+                optimizerD.zero_grad()
 
                 """=========Original============"""
-                # train with real
-                inputs = torch.clone(adj_mat)
-                # print("netD input shape: ", inputs.dtype)
-                D_pred = netD(inputs.to(torch.float32))
-                errD_real = D_pred
-                errD_real.backward() # discriminator should assign 1's to true samples
+                # # train with real
+                # inputs = torch.clone(adj_mat)
+                # # print("netD input shape: ", inputs.dtype)
+                # D_pred = netD(inputs.to(torch.float32))
+                # errD_real = D_pred
+                # errD_real.backward() # discriminator should assign 1's to true samples
 
-                # train with fake
-                noise = torch.randn(args.batch_size, noise_dim) # (batch_size, hidden_size)
-                # insert data processing
-                with torch.no_grad():
-                    fake = netG(noise, X, Y, Y_len)
-                # embed = graph2vec.infer([nx.from_numpy_matrix(f.detach().numpy()) for f in fake])
-                fake_tensor = netD(fake)
-                errD_fake = -1*fake_tensor
-                errD_fake.backward() # discriminator should assign -1's to fake samples??
+                # # train with fake
+                # noise = torch.randn(args.batch_size, noise_dim) # (batch_size, hidden_size)
+                # # insert data processing
+                # with torch.no_grad():
+                #     fake = netG(noise, X, Y, Y_len)
+                # # embed = graph2vec.infer([nx.from_numpy_matrix(f.detach().numpy()) for f in fake])
+                # fake_tensor = netD(fake)
+                # errD_fake = -1*fake_tensor
+                # errD_fake.backward() # discriminator should assign -1's to fake samples??
 
-                # compute Wasserstein distance and update parameters
-                errD = errD_real - errD_fake
-                optimizerD.step()
+                # # compute Wasserstein distance and update parameters
+                # errD = errD_real - errD_fake
+                # optimizerD.step()
 
                 """==========Test==========="""
-                
-                # print(f"Iterative errD {errD.item()}, errD_real {errD_real.item()}, errD_fake {errD_fake.item()}: ")
+                inputs, batch_loss = torch.clone(adj_mat), 0
+                # remove padding on adj_mat
+                for i in range(inputs.size(0)):
+                    adj = inputs[i][:Y_len[i].item(), :Y_len[i].item()]
+                    batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
+                errD_real = torch.mean(batch_loss)
+                errD_real.backward(gradient=torch.tensor([1]).to(torch.float), retain_graph=True)
+
+                noise, batch_loss = torch.randn(args.batch_size, noise_dim), 0
+                with torch.no_grad():
+                    fake = netG(noise, X, Y, Y_len)
+                # remove padding on netG output (might have to torchify it)
+                new_fake = []
+                for f in fake:
+                    nonzeros = torch.nonzero(f)
+                    min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
+                    adj = f[min_indx:max_indx, min_indx:max_indx]
+                    batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
+                errD_fake = torch.mean(batch_loss)
+                errD_fake.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
+
+                optimizerD.step()
+                errD = errD_real - errD_fake
                 b_errD += errD
 
+                # print(f"Iterative errD {errD.item()}, errD_real {errD_real.item()}, errD_fake {errD_fake.item()}: ")
+
             # ========== Train Generator ==================
-            netD.eval()
+            # netD.eval()
+            netD.model.eval()
             netG.train(True)
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
-            noisev = torch.randn(args.batch_size, noise_dim)
+            noisev, batch_loss = torch.randn(args.batch_size, noise_dim), 0
             fake = netG(noisev, X, Y, Y_len) # return adjs
-            fake_tensor = netD(fake)
-            errG = -1*fake_tensor
-            errG.backward()
+            # fake_tensor = netD(fake)
+            """============Test============="""
+            # remove padding on netG output
+            new_fake = []
+            for f in fake:
+                nonzeros = torch.nonzero(f)
+                min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
+                adj = f[min_indx:max_indx, min_indx:max_indx]
+                batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
+            errG = torch.mean(batch_loss)
+            errG.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
             G_optimizer_rnn.step()
             G_optimizer_output.step()
 
@@ -248,7 +291,8 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     Gpath = './cache/graphrnn/saved_model/generator.pth'
     Dpath = './cache/graphrnn/saved_model/discriminator.pth'
     torch.save(netG.state_dict(), Gpath)
-    torch.save(netD.state_dict(), Dpath)
+    # torch.save(netD.state_dict(), Dpath)
+    torch.save(netD.model.state_dict(), Dpath) # for GAM netD
     if train_inverter:
         Ipath = './cache/graphrnn/saved_model/inverter.pth'
         torch.save(netI.state_dict(), Ipath)

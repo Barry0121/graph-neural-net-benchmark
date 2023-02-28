@@ -58,10 +58,15 @@ class StepNetworkLayer(torch.nn.Module):
         :param features: Node feature matrix.
         :return label: Label sampled from the neighbourhood with attention.
         """
+        print("neighbor: ", neighbor_vector)
+        print("features: ", features)
         neighbor_features = torch.mm(neighbor_vector.view(1,-1).float(), features)
+        # print("neighbor_features: ", neighbor_features)
         attention_spread = self.attention * neighbor_features
         normalized_attention_spread = attention_spread / attention_spread.sum()
         normalized_attention_spread = normalized_attention_spread.detach().numpy().reshape(-1)
+        # print(self.identifiers)
+        print("attention spread: ", normalized_attention_spread)
         label = np.random.choice(np.arange(len(self.identifiers)), p=normalized_attention_spread)
         return label
 
@@ -75,6 +80,10 @@ class StepNetworkLayer(torch.nn.Module):
         """
         orig_neighbors = set(n.item() for n in torch.nonzero(adj[node, :]))
         label = self.sample_node_label(adj[node, :], features)
+        # print("adj: ", adj)
+        # print("inverse_labels: ", inverse_labels)
+        # print("labels: ", labels)
+        # print(inverse_labels[str(label)])
         labels = list(set(orig_neighbors).intersection(set(inverse_labels[str(label)])))
         if len(labels) > 0: # "workaround" because sometimes labels is magically empty??
             new_node = random.choice(labels)
@@ -96,8 +105,13 @@ class StepNetworkLayer(torch.nn.Module):
         :return node: New node to move to.
         :return attention_score: Attention score of chosen node.
         """
+        node = int(node) # cast node type
+        features = torch.unsqueeze(features, dim=-1)
+        # print("pre-cast inverse label: ", data["inverse_labels"])
+        inverse_labels = {str(int(float(k))): v for k, v in data["inverse_labels"].items()}
+        # print("post-cast inverse label: ", inverse_labels)
         feature_row, node, attention_score = self.make_step(node, adj, features,
-                                                            data["labels"], data["inverse_labels"])
+                                                            data["labels"], inverse_labels)
 
         hidden_attention = torch.mm(self.attention.view(1, -1), self.theta_step_1)
         hidden_node = torch.mm(torch.t(feature_row), self.theta_step_2)
@@ -145,14 +159,14 @@ class GAM(torch.nn.Module):
     """
     Graph Attention Machine class.
     """
-    def __init__(self, args):
+    def __init__(self, args, dataset_name):
         """
         Initializing the machine.
         :param args: Arguments object.
         """
         super(GAM, self).__init__()
         self.args = args
-        self.identifiers, self.class_number = read_node_labels(self.args)
+        self.identifiers, self.class_number = read_node_labels(args, dataset_name)
         self.step_block = StepNetworkLayer(self.args, self.identifiers)
         self.recurrent_block = torch.nn.LSTM(self.args.combined_dimensions,
                                              self.args.combined_dimensions, 1)
@@ -197,9 +211,9 @@ class GAMTrainer(object):
     """
     Object to train a GAM model.
     """
-    def __init__(self, args):
+    def __init__(self, args, dataset_name):
         self.args = args
-        self.model = GAM(args)
+        self.model = GAM(self.args, dataset_name=dataset_name)
         self.setup_graphs()
         self.logs = create_logs(self.args)
 
@@ -228,8 +242,9 @@ class GAMTrainer(object):
             degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
             inv_degrees = {}
             for k, v in degrees.items():
-                if str(v) in degrees.keys(): inv_degrees[str(v)].add(int(k))
+                if str(v) in inv_degrees.keys(): inv_degrees[str(v)].add(int(k))
                 else: inv_degrees[str(v)] = {int(k)}
+            # print("inv_degrees: ", inv_degrees)
             data = {
                 'target': target,
                 'edges': None, # already in adjacency matrix
