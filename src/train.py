@@ -171,7 +171,8 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                     adj = inputs[i][:Y_len[i].item(), :Y_len[i].item()]
                     batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
                 errD_real = torch.mean(batch_loss)
-                errD_real.backward(gradient=torch.tensor([1]).to(torch.float), retain_graph=True)
+                errD_real.backward(retain_graph=True)
+                # errD_real.backward(gradient=torch.tensor([1]).to(torch.float), retain_graph=True)
 
                 noise, batch_loss = torch.randn(args.batch_size, noise_dim), 0
                 with torch.no_grad():
@@ -183,8 +184,9 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                     min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
                     adj = f[min_indx:max_indx, min_indx:max_indx]
                     batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
-                errD_fake = torch.mean(batch_loss)
-                errD_fake.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
+                errD_fake = -1*torch.mean(batch_loss)
+                errD_fake.backward(retain_graph=True)
+                # errD_fake.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
 
                 optimizerD.step()
                 errD = errD_real - errD_fake
