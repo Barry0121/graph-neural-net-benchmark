@@ -58,9 +58,10 @@ class StepNetworkLayer(torch.nn.Module):
         :param features: Node feature matrix.
         :return label: Label sampled from the neighbourhood with attention.
         """
-        print("neighbor: ", neighbor_vector)
-        print("features: ", features)
-        neighbor_features = torch.mm(neighbor_vector.view(1,-1).float(), features)
+        print("neighbor: ", neighbor_vector.shape)
+        print('neighbor_vector.view(1,-1).shape :', neighbor_vector.view(1,-1).shape) 
+        print("features: ", features.shape)
+        neighbor_features = torch.mm(neighbor_vector.view(1,-1).float(), features.squeeze())
         # print("neighbor_features: ", neighbor_features)
         attention_spread = self.attention * neighbor_features
         normalized_attention_spread = attention_spread / attention_spread.sum()
@@ -250,7 +251,7 @@ class GAMTrainer(object):
                 'labels': degrees, # should be node degrees
                 'inverse_labels': inv_degrees # should be dictionary of what degrees correspond to what nodes
             }
-            _, features = create_features(data, identifiers, use_graph=False, adj=adj)
+            _, features = create_features(data, self.model.identifiers, use_graph=False, adj=adj)
         else:
             data = json.load(open(graph_path))
             graph_init, features = create_features(data, self.model.identifiers)
