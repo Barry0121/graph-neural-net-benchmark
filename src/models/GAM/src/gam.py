@@ -237,8 +237,7 @@ class GAMTrainer(object):
         """
         if already_matrix:
             num_nodes = adj.shape[0]
-            features = torch.ones(num_nodes)
-            nodes = torch.Tensor(range(adj.shape[0]))
+            nodes = torch.Tensor(range(num_nodes))
             degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
             inv_degrees = {}
             for k, v in degrees.items():
@@ -251,6 +250,7 @@ class GAMTrainer(object):
                 'labels': degrees, # should be node degrees
                 'inverse_labels': inv_degrees # should be dictionary of what degrees correspond to what nodes
             }
+            _, features = create_features(data, identifiers, use_graph=False, adj=adj)
         else:
             data = json.load(open(graph_path))
             graph_init, features = create_features(data, self.model.identifiers)

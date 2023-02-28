@@ -63,7 +63,7 @@ def create_logs(args):
     log["params"] = vars(args)
     return log
 
-def create_features(data, identifiers):
+def create_features(data, identifiers, use_graph=False, adj=None):
     """
      Creates a tensor of node features.
     :param data: Hash table with data.
@@ -71,10 +71,15 @@ def create_features(data, identifiers):
     :return graph: NetworkX object.
     :return features: Feature Tensor (PyTorch).
     """
-    graph = nx.from_edgelist(data["edges"])
     features = []
-    for node in graph.nodes():
-        features.append([1.0 if data["labels"][str(node)] == i else 0.0 for i in range(len(identifiers))])
+    if use_graph:
+        graph = nx.from_edgelist(data["edges"])
+        for node in graph.nodes():
+            features.append([1.0 if data['labels'][str(node)] == i else 0.0 for i in range(len(identifiers))])
+    else:
+        graph = None
+        for node in range(adj.shape[0]):
+            features.append([1.0 if data['labels'][str(node)] == i else 0.0 for i in range(len(identifiers))])
     features = np.array(features, dtype=np.float32)
     features = torch.tensor(features)
     return graph, features
