@@ -87,9 +87,9 @@ def get_tsne_plots(args, num_of_datapoints=512):
     plt.ylim(-80, 80)
     plt.scatter(x, y, s=1)
     plt.title("Real Graph's Embedding Space")
-    if not os.path.exists(args.graph_save_path):
-        os.makedirs(args.graph_save_path)
-    plt.savefig(args.graph_save_path+"real_embeddings.png")
+    # if not os.path.exists(args.graph_save_path):
+    #     os.makedirs(args.graph_save_path)
+    plt.savefig("./visualizatinos/real_embeddings.png")
 
     # generated, latent
     gen_latent_embed = TSNE(
@@ -103,9 +103,9 @@ def get_tsne_plots(args, num_of_datapoints=512):
     plt.ylim(-80, 80)
     plt.scatter(x, y, s=1)
     plt.title("Generated Graph's Latent Space")
-    if not os.path.exists(args.graph_save_path):
-        os.makedirs(args.graph_save_path)
-    plt.savefig(args.graph_save_path+"gen_latent.png")
+    # if not os.path.exists(args.graph_save_path):
+    #     os.makedirs(args.graph_save_path)
+    plt.savefig("./visualizatinos/gen_latent.png")
 
     # generated, embedding
     gen_embeddings_embed = TSNE(
@@ -119,6 +119,6 @@ def get_tsne_plots(args, num_of_datapoints=512):
     plt.ylim(-80, 80)
     plt.scatter(x, y, s=1)
     plt.title("Generated Graph's Embedding Space")
-    if not os.path.exists(args.graph_save_path):
-        os.makedirs(args.graph_save_path)
-    plt.savefig(args.graph_save_path+"gen_embeddings.png")
+    # if not os.path.exists(args.graph_save_path):
+    #     os.makedirs(args.graph_save_path)
+    plt.savefig("./visualizatinos/gen_embeddings.png")

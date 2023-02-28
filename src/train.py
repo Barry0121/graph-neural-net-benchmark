@@ -131,6 +131,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                     p.data.clamp_(clamp_lower, clamp_upper)
                 netD.zero_grad()
 
+                """=========Original============"""
                 # train with real
                 inputs = torch.clone(adj_mat)
                 # print("netD input shape: ", inputs.dtype)
@@ -152,6 +153,8 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 errD = errD_real - errD_fake
                 optimizerD.step()
 
+                """==========Test==========="""
+                
                 # print(f"Iterative errD {errD.item()}, errD_real {errD_real.item()}, errD_fake {errD_fake.item()}: ")
                 b_errD += errD
 

@@ -140,7 +140,7 @@ class DownStreamNetworkLayer(torch.nn.Module):
         attention = torch.mm(hidden_state.view(1, -1), self.theta_rank)
         attention = torch.nn.functional.softmax(attention, dim=1)
         return predictions, attention
-    
+
 class GAM(torch.nn.Module):
     """
     Graph Attention Machine class.
@@ -210,7 +210,7 @@ class GAMTrainer(object):
         self.training_graphs = glob.glob(self.args.train_graph_folder + "*.json")
         self.test_graphs = glob.glob(self.args.test_graph_folder + "*.json")
 
-    def process_graph(self, graph_path, batch_loss, 
+    def process_graph(self, graph_path=None, batch_loss=None,
                       already_matrix=False, adj=None, target=1):
         """
         Reading a graph and doing a forward pass on a graph with a time budget.
@@ -228,8 +228,8 @@ class GAMTrainer(object):
             degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
             inv_degrees = {}
             for k, v in degrees.items():
-                if str(v) in test.keys(): inv_test[str(v)].add(int(k))
-                else: inv_test[str(v)] = {int(k)}
+                if str(v) in degrees.keys(): inv_degrees[str(v)].add(int(k))
+                else: inv_degrees[str(v)] = {int(k)}
             data = {
                 'target': target,
                 'edges': None, # already in adjacency matrix
@@ -242,7 +242,7 @@ class GAMTrainer(object):
             # sort nodes; is unfortunately necessary
             graph = nx.Graph()
             graph.add_nodes_from(sorted(graph_init.nodes(data=True)))
-            graph.add_edges_from(graph_init.edges(data=True))       
+            graph.add_edges_from(graph_init.edges(data=True))
             # after this, all torch.Tensor
             adj = nx.adjacency_matrix(graph).todense()
             adj = torch.Tensor(adj).int()
@@ -261,16 +261,20 @@ class GAMTrainer(object):
         self.model.reset_attention()
         return batch_loss
 
-    def process_batch(self, batch):
+    def process_batch(self, batch=None, already_matrix=False, adj=None):
         """
         Forward and backward propagation on a batch of graphs.
-        :param batch: Batch if graphs.
+        :param batch: Batch of graphs.
         :return loss_value: Value of loss on batch.
         """
         self.optimizer.zero_grad()
         batch_loss = 0
-        for graph_path in batch:
-            batch_loss = self.process_graph(graph_path, batch_loss)
+        if batch:
+            for graph_path in batch:
+                batch_loss = self.process_graph(graph_path, batch_loss)
+        else:
+            for a in adj:
+                batch_loss = self.process_graph(already_matrix=already_matrix, adj=a)
         batch_loss.backward(retain_graph=True)
         self.optimizer.step()
         # do weight clipping
@@ -309,6 +313,7 @@ class GAMTrainer(object):
                 batch_range.set_description("(Loss=%g)" % loss_score)
             self.update_log()
 
+
     def score_graph(self, data, prediction):
         """
         Scoring the prediction on the graph.
@@ -336,7 +341,7 @@ class GAMTrainer(object):
             graph = nx.Graph()
             graph.add_nodes_from(sorted(graph_init.nodes(data=True)))
             graph.add_edges_from(graph_init.edges(data=True))
-        
+
             # after this, all torch.Tensor
             nodes = torch.Tensor(range(len(graph.nodes()))).int()
             adj = nx.adjacency_matrix(graph).todense()

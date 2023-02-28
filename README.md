@@ -5,7 +5,7 @@ Author: Barry Xue. Jianming Geng, Winston Yu
 This repository contains training code for "Investigating New Adversarial Attack on Deep Graph Neural Networks: Creating Perturbation from Latent Space" report and the materials and codes from the exploration of the topic of Graph Neural Network.
 
 # Option 1: Train WGAN network with GraphRNN, Discriminator, and Inverter with `main.py`
-`main.py` is a initition step 
+`main.py` will call the training script, 
 
 # Option 2: Test GCN and GCN-AE with `run.py`
 ## Options to Run the `run.py`

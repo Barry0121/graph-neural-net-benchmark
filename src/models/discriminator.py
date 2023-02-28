@@ -129,3 +129,5 @@ class TestNN(nn.Module):
         """
         x = self.reduce(x)
         return torch.mean(self.act(x))
+
+
