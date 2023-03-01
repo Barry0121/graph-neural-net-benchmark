@@ -58,16 +58,19 @@ class StepNetworkLayer(torch.nn.Module):
         :param features: Node feature matrix.
         :return label: Label sampled from the neighbourhood with attention.
         """
-        print("neighbor: ", neighbor_vector.shape)
-        print('neighbor_vector.view(1,-1).shape :', neighbor_vector.view(1,-1).shape) 
-        print("features: ", features.shape)
+        # print("neighbor: ", neighbor_vector)
+        # print('neighbor_vector.view(1,-1).shape :', neighbor_vector.view(1,-1).shape)
+        # print("features: ", features)
         neighbor_features = torch.mm(neighbor_vector.view(1,-1).float(), features.squeeze())
         # print("neighbor_features: ", neighbor_features)
         attention_spread = self.attention * neighbor_features
+        # print("attention: ", self.attention)
+        # print("neighbor_features: ", neighbor_features)
+        # print("attention_spread: ", attention_spread)
         normalized_attention_spread = attention_spread / attention_spread.sum()
         normalized_attention_spread = normalized_attention_spread.detach().numpy().reshape(-1)
         # print(self.identifiers)
-        print("attention spread: ", normalized_attention_spread)
+        # print("attention spread: ", normalized_attention_spread)
         label = np.random.choice(np.arange(len(self.identifiers)), p=normalized_attention_spread)
         return label
 

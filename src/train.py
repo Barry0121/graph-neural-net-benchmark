@@ -65,7 +65,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     # ======Testing=======
     # set up a register_hook to check parameter gradient)
-    hd = list(netD.model.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update.."))
+    # hd = list(netD.model.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update.."))
     hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update.."))
     # if train_inverter:
     #     hi = list(netI.parameters())[0].register_hook(lambda grad: print(f"NetI parameter Update.."))
@@ -174,11 +174,11 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 errD_real.backward(retain_graph=True)
                 # errD_real.backward(gradient=torch.tensor([1]).to(torch.float), retain_graph=True)
 
+                # print(" \n\n\n NetG to NetD \n\n\n")
                 noise, batch_loss = torch.randn(args.batch_size, noise_dim), 0
                 with torch.no_grad():
                     fake = netG(noise, X, Y, Y_len)
                 # remove padding on netG output (might have to torchify it)
-                new_fake = []
                 for f in fake:
                     nonzeros = torch.nonzero(f)
                     min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
@@ -205,14 +205,14 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # fake_tensor = netD(fake)
             """============Test============="""
             # remove padding on netG output
-            new_fake = []
             for f in fake:
                 nonzeros = torch.nonzero(f)
                 min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
                 adj = f[min_indx:max_indx, min_indx:max_indx]
                 batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
-            errG = torch.mean(batch_loss)
-            errG.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
+            errG = -1*torch.mean(batch_loss)
+            errG.backward()
+            # errG.backward(gradient=torch.tensor(-1).to(torch.float), retain_graph=True)
             G_optimizer_rnn.step()
             G_optimizer_output.step()
 

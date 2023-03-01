@@ -433,64 +433,11 @@ class GraphRNN(nn.Module):
         # print(y_output.size())
         y_output_adj = torch.stack([decode_adj(op) for op in y_output])
         # print(y_output_adj.size())
-        return y_output_adj
-
-    # this is for testing only
-    # def forwardv2(self, noise, X, Y, length):
-    #     """
-    #     noise: noise/latent vector
-    #     X: modified sequenced adjcency vectors (with global padding)
-    #     Y: original seuqneced adjcency vectors (with global padding)
-    #     length: length of each adjcency vectors
-    #     """
-    #     # Get self.rnn input (sort data, filter by max, etc)
-    #     x_unsorted = X.float()
-    #     y_unsorted = Y.float()
-    #     y_len_unsorted = length
-
-    #     # sort by length
-    #     y_len,sort_index = torch.sort(y_len_unsorted,0,descending=True)
-    #     # y_len = y_len.numpy().tolist()
-    #     x = torch.index_select(x_unsorted,0,sort_index)
-    #     y = torch.index_select(y_unsorted,0,sort_index)
-    #     output_x = torch.cat((torch.ones(y.size(0),1,1),y[:,0:-1,0:1]),dim=1) # x's shape is determined by y's shape
-    #     print(output_x.size(), y.size())
-
-    #     # # output_x_len is needed to count self.output forward output length
-    #     # output_x_len = []
-    #     # output_x_len_bin = np.bincount(np.array(y_len))
-    #     # for i in range(len(output_x_len_bin)-1,0,-1):
-    #     #     count_temp = np.sum(output_x_len_bin[i:]) # count how many y_len is above i
-    #     #     output_x_len.extend([min(i,y.size(2))]*count_temp) # put them in output_x_len; max value should not exceed y.size(2)
-
-    #     #TODO: might need more transformation, but I don't know how to add them without breaking the pack_padded_sequence object
-
-    #     # pack them to the right device
-    #     x = x.to(self.device)
-    #     y = y.to(self.device)
-    #     output_x = output_x.to(self.device)
-
-    #     # now for the self.rnn forward
-    #     self.rnn.hidden = torch.stack(self.rnn.num_layers*[noise]).to(self.device)
-    #     h = self.rnn(x, pack=False)
-    #     # print("h.shape: ", h.shape)
-
-    #     # create self.output's hidden vector from self.rnn's output h
-    #     # h = pad_sequence(h, batch_first=True) # now the input and output would have the same shape as output_x and output_y
-    #     h = pack_padded_sequence(h, [h.size(1) for _ in range(h.size(0))], batch_first=True).data # this essentially flatten the first two dimension of h
-    #     # print('hidden size: ', self.args.hidden_size_rnn_output)
-    #     print("h.shape: ", h.size())
-    #     # reverse and pad h (not sure how this will influence the output)
-    #     idx = [i for i in range(h.size(0) - 1, -1, -1)]
-    #     idx = Variable(torch.LongTensor(idx)).to(self.device)
-    #     h = h.index_select(0, idx)
-    #     hidden_null = Variable(torch.zeros(self.rnn.num_layers-1, h.size(0), h.size(1))).to(self.device)
-    #     self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)),hidden_null),dim=0)
-
-    #     # for the self.output forward
-    #     y_pred = self.output(output_x, pack=False)
-    #     print("y_pred.shape: ", y_pred.size())
-    #     return
+        # apply thresholding on sigmoid results
+        # return (y_output_adj >= 0.5).to(torch.int)
+        output = torch.where(y_output_adj >= 0.5, 1, 0)
+        # print(torch.sum(output))
+        return output
 
     def generate(self, X):
         """
@@ -525,6 +472,7 @@ class GraphRNN(nn.Module):
                 output_y_pred_step = self.output(output_x_step)
                 # print('output y grad: ', output_y_pred_step.grad)
                 # output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
+                output_x_step = torch.sigmoid(output_y_pred_step)
                 x_step[:,:,j:j+1] = output_x_step
                 # self.output.hidden = Variable(self.output.hidden.data).to(self.device)
             y_pred_long[:, i:i + 1, :] = x_step
