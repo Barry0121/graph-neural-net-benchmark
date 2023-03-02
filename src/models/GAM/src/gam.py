@@ -236,6 +236,23 @@ class GAMTrainer(object):
         # self.test_graphs = glob.glob(self.args.test_graph_folder + "*.json")
         self.training_graphs = adj_matrices
 
+    def get_datadict_features_node(self, adj, target):
+        num_nodes = adj.shape[0]
+        nodes = torch.Tensor(range(num_nodes))
+        degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
+        inv_degrees = {}
+        for k, v in degrees.items():
+            if str(v) in inv_degrees.keys(): inv_degrees[str(v)].add(int(k))
+            else: inv_degrees[str(v)] = {int(k)}
+        data = {
+            'target': target, # label of graph's adj
+            'labels': degrees, # node degree of each node
+            'inverse_labels': inv_degrees # what node degrees correspond to what nodes
+        }
+        _, features = create_features(data, self.model.identifiers, use_graph=False, adj=adj)
+        node = random.choice(nodes).item()
+        return data, features, node
+
     def process_graph(self, graph_path=None, batch_loss=None,
                       already_matrix=False, adj=None, target=1):
         """
@@ -248,21 +265,7 @@ class GAMTrainer(object):
         :return batch_loss: Incremented loss on the current batch being processed.
         """
         if already_matrix:
-            num_nodes = adj.shape[0]
-            nodes = torch.Tensor(range(num_nodes))
-            degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
-            inv_degrees = {}
-            for k, v in degrees.items():
-                if str(v) in inv_degrees.keys(): inv_degrees[str(v)].add(int(k))
-                else: inv_degrees[str(v)] = {int(k)}
-            # print("inv_degrees: ", inv_degrees)
-            data = {
-                'target': target,
-                'edges': None, # already in adjacency matrix
-                'labels': degrees, # should be node degrees
-                'inverse_labels': inv_degrees # should be dictionary of what degrees correspond to what nodes
-            }
-            _, features = create_features(data, self.model.identifiers, use_graph=False, adj=adj)
+            data, features, node = self.get_datadict_features_node(adj, target=target)
         else:
             data = json.load(open(graph_path))
             graph_init, features = create_features(data, self.model.identifiers)
@@ -274,7 +277,7 @@ class GAMTrainer(object):
             adj = nx.adjacency_matrix(graph).todense()
             adj = torch.Tensor(adj).int()
             nodes = torch.Tensor(range(len(graph.nodes()))).int()
-        node = random.choice(nodes).item()
+            node = random.choice(nodes).item()
 
         attention_loss = 0
         for t in range(self.args.time):
@@ -288,7 +291,7 @@ class GAMTrainer(object):
         self.model.reset_attention()
         return batch_loss
 
-    def process_batch(self, batch=None, already_matrix=False, adj=None):
+    def process_batch(self, batch=None, already_matrix=False, adj_seq=None):
         """
         Forward and backward propagation on a batch of graphs.
         :param batch: Batch of graphs.
@@ -300,8 +303,8 @@ class GAMTrainer(object):
             for graph_path in batch:
                 batch_loss = self.process_graph(graph_path, batch_loss)
         else:
-            for a in adj:
-                batch_loss = self.process_graph(batch_loss=batch_loss, already_matrix=already_matrix, adj=a)
+            for adj in adj_seq:
+                batch_loss = self.process_graph(batch_loss=batch_loss, already_matrix=already_matrix, adj=adj)
         batch_loss.backward(retain_graph=True)
         self.optimizer.step()
         # do weight clipping
