@@ -276,7 +276,7 @@ class GAMTrainer(object):
             if t < self.args.time - 2:
                 attention_loss += (self.args.gamma**(self.args.time-t))*torch.log(attention_score)
         reward = calculate_reward(target, predictions)
-        batch_loss = batch_loss-reward*attention_loss
+        batch_loss = batch_loss - reward * attention_loss
         self.model.reset_attention()
         return batch_loss
 
