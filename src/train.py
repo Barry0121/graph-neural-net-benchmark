@@ -36,6 +36,27 @@ def choose_device():
         return 'cpu'
 
 
+def gam_forward(adj, gam_trainer, target):
+    # from gam.py process_graph()
+    num_nodes = adj.shape[0]
+    nodes = torch.Tensor(range(num_nodes))
+    node = nodes[torch.randint(0, num_nodes, (1, 1))[0, 0]]
+    degrees = dict(zip([str(n) for n in range(num_nodes)], adj.sum(dim=0).numpy()))
+    inv_degrees = {}
+    for k, v in degrees.items():
+        if str(v) in inv_degrees.keys(): inv_degrees[str(v)].add(int(k))
+        else: inv_degrees[str(v)] = {int(k)}
+    # print("inv_degrees: ", inv_degrees)
+    data = {
+        'target': target,
+        'edges': None, # already in adjacency matrix
+        'labels': degrees, # should be node degrees
+        'inverse_labels': inv_degrees # should be dictionary of what degrees correspond to what nodes
+    }
+    _, features = create_features(data, gam_trainer.model.identifiers, use_graph=False, adj=adj)
+    return gam_trainer.model(data=data, adj=adj, features=features, node=node,  get_embedding=True)
+
+
 def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_upper=0.1, lr=1e-3, betas=1e-5, lamb=0.1, loss_func='MSE', device=choose_device()):
     # save losses
     iloss_lst = []
@@ -51,7 +72,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     print('padded adjacency matrix shape is: ', adj_shape)
 
     # initialize noise, optimizer and loss
-    netD_args = parameter_parser()
+    gam_trainer_args = parameter_parser()
     # print(netD_args)
 
     # netD_args['dataset_name'] = args.graph_type
@@ -60,8 +81,8 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     # netG_rnn = netG.rnn
     # netG_output = netG.output
     # netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
-    # netD = TestNN(adj_shape[0]*adj_shape[1], 1) # matching dimension of Graph2Vec
-    netD = GAMTrainer(netD_args, args.graph_type)
+    netD = TestNN(gam_trainer_args.combined_dimensions, 1) # matching dimension of Graph2Vec
+    gam_trainer = GAMTrainer(gam_trainer_args, args.graph_type)
 
     # ======Testing=======
     # set up a register_hook to check parameter gradient)
@@ -81,7 +102,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     graph2vec = get_graph2vec(args.graph_type, dim=512) # use infer() to generate new graph embedding
     optimizerI = optim.Adam(netI.parameters(), lr=lr)
-    optimizerD = optim.Adam(netD.model.parameters(), lr=lr, betas=[betas for _ in range(2)])
+    optimizerD = optim.Adam(gam_trainer.model.parameters(), lr=lr, betas=[betas for _ in range(2)])
     lossI = WGAN_ReconLoss(device, lamb, loss_func)
     G_optimizer_rnn, G_optimizer_output, G_scheduler_rnn, G_scheduler_output = netG.init_optimizer(lr=0.1) # initialize optimizers
 
@@ -128,17 +149,26 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             j = 0 # counter for 1, 2, ... Diters
             # enable training
             # netD.train()
-            netD.model.train(True)
+            netD.train(True)
             # for param in netG.parameters():
             #     param.requires_grad = False
             netG.eval()
+
+            # fit gam_trainer
+            adjs = []
+            inputs = torch.clone(adj_mat)
+            for i in range(inputs.size(0)):
+                adjs.append(inputs[i][:Y_len[i].item(), :Y_len[i].item()])
+            gam_trainer.setup_graphs(adjs)
+            gam_trainer.fit()
+
             b_errD = 0
             while j < Diters:
                 j += 1
                 # weight clipping: clamp parameters to a cube
                 # for p in netD.parameters():
                 #     p.data.clamp_(clamp_lower, clamp_upper)
-                for p in netD.model.parameters():
+                for p in gam_trainer.model.parameters():
                     p.data.clamp_(clamp_lower, clamp_upper)
                 optimizerD.zero_grad()
 
@@ -165,26 +195,30 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 # optimizerD.step()
 
                 """==========Test==========="""
-                inputs, batch_loss = torch.clone(adj_mat), 0
+                inputs = torch.clone(adj_mat)
                 # remove padding on adj_mat
                 for i in range(inputs.size(0)):
                     adj = inputs[i][:Y_len[i].item(), :Y_len[i].item()]
-                    batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
-                errD_real = torch.mean(batch_loss)
+                    real_embed = gam_forward(adj, gam_trainer, target=1)
+                errD_real = torch.mean(netD(real_embed))
                 errD_real.backward(retain_graph=True)
                 # errD_real.backward(gradient=torch.tensor([1]).to(torch.float), retain_graph=True)
 
                 # print(" \n\n\n NetG to NetD \n\n\n")
-                noise, batch_loss = torch.randn(args.batch_size, noise_dim), 0
+                noise = torch.randn(args.batch_size, noise_dim)
                 with torch.no_grad():
                     fake = netG(noise, X, Y, Y_len)
-                # remove padding on netG output (might have to torchify it)
+                    # while fake.sum() == 0:
+                    #     fake = netG(noise, X, Y, Y_len)
+                # remove padding on netG output (might have to torchify it
                 for f in fake:
-                    nonzeros = torch.nonzero(f)
+                    # print(f)
+                    nonzeros = torch.nonzero(f) # []
                     min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
-                    adj = f[min_indx:max_indx, min_indx:max_indx]
-                    batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
-                errD_fake = -1*torch.mean(batch_loss)
+                    adj = f[min_indx:max_indx+1, min_indx:max_indx+1]
+                    fake_embed = gam_forward(adj, gam_trainer, target=-1)
+                    # batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj, target=0)
+                errD_fake = -1*torch.mean(netD(fake_embed))
                 errD_fake.backward(retain_graph=True)
                 # errD_fake.backward(gradient=torch.tensor([-1]).to(torch.float), retain_graph=True)
 
@@ -196,21 +230,23 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
             # ========== Train Generator ==================
             # netD.eval()
-            netD.model.eval()
+            netD.eval()
             netG.train(True)
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
-            noisev, batch_loss = torch.randn(args.batch_size, noise_dim), 0
+            noisev = torch.randn(args.batch_size, noise_dim)
             fake = netG(noisev, X, Y, Y_len) # return adjs
+            # while fake.sum() == 0:
+            #     fake = netG(noise, X, Y, Y_len)
             # fake_tensor = netD(fake)
             """============Test============="""
             # remove padding on netG output
             for f in fake:
                 nonzeros = torch.nonzero(f)
                 min_indx, max_indx = torch.min(nonzeros), torch.max(nonzeros)
-                adj = f[min_indx:max_indx, min_indx:max_indx]
-                batch_loss = netD.process_graph(batch_loss=batch_loss, already_matrix=True, adj=adj)
-            errG = -1*torch.mean(batch_loss)
+                adj = f[min_indx:max_indx+1, min_indx:max_indx+1]
+                fake_embed = gam_forward(adj, gam_trainer, target=-1)
+            errG = -1*torch.mean(netD(fake_embed))
             errG.backward()
             # errG.backward(gradient=torch.tensor(-1).to(torch.float), retain_graph=True)
             G_optimizer_rnn.step()
@@ -265,16 +301,16 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             count_batch += 1
 
         # Print out training information per epoch.
-        # if train_inverter:
-        #     if (e+1) % 1 == 0:
-        #         elapsed_time = time.time() - start_time
-        #         print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
-        #             elapsed_time, e+1, args.epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
-        # else:
-        #     if (e+1) % 1 == 0:
-        #         elapsed_time = time.time() - start_time
-        #         print('Elapsed time [{:.4f}], Iteration [{}/{}], D Loss: {:.4f}, G Loss {:.4f}'.format(
-        #             elapsed_time, e+1, args.epochs, e_errD/count_batch, e_errG/count_batch))
+        if train_inverter:
+            if (e+1) % 1 == 0:
+                elapsed_time = time.time() - start_time
+                print('Elapsed time [{:.4f}], Iteration [{}/{}], I Loss: {:.4f}, D Loss: {:.4f}, G Loss {:.4f}'.format(
+                    elapsed_time, e+1, args.epochs, e_errI/count_batch, e_errD/count_batch, e_errG/count_batch))
+        else:
+            if (e+1) % 1 == 0:
+                elapsed_time = time.time() - start_time
+                print('Elapsed time [{:.4f}], Iteration [{}/{}], D Loss: {:.4f}, G Loss {:.4f}'.format(
+                    elapsed_time, e+1, args.epochs, e_errD/count_batch, e_errG/count_batch))
 
 
         # append training loss across
@@ -294,7 +330,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     Dpath = './cache/graphrnn/saved_model/discriminator.pth'
     torch.save(netG.state_dict(), Gpath)
     # torch.save(netD.state_dict(), Dpath)
-    torch.save(netD.model.state_dict(), Dpath) # for GAM netD
+    torch.save(gam_trainer.model.state_dict(), Dpath) # for GAM netD
     if train_inverter:
         Ipath = './cache/graphrnn/saved_model/inverter.pth'
         torch.save(netI.state_dict(), Ipath)
@@ -318,4 +354,4 @@ args = Args()
 #     break
 
 # ===============Test training function================
-train(args=args, train_inverter=True)
+train(args=args, train_inverter=False)

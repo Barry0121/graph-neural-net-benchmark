@@ -71,7 +71,14 @@ class StepNetworkLayer(torch.nn.Module):
         normalized_attention_spread = normalized_attention_spread.detach().numpy().reshape(-1)
         # print(self.identifiers)
         # print("attention spread: ", normalized_attention_spread)
-        label = np.random.choice(np.arange(len(self.identifiers)), p=normalized_attention_spread)
+        if sum(np.isnan(normalized_attention_spread))>0: # TODO: issue with the check condition (ValueError: probabilities contain NaN)
+            label = np.random.choice(np.arange(len(self.identifiers)), p=normalized_attention_spread)
+        else:
+            # if no available features, unifromly sample from the graph
+            normalized_features_sum = features.sum(dim=0).squeeze()
+            normalized_features_sum /= normalized_features_sum.sum()
+            normalized_features_sum = normalized_features_sum.detach().numpy()
+            label = np.random.choice(np.arange(len(self.identifiers)), p=normalized_features_sum)
         return label
 
     def make_step(self, node, adj, features, labels, inverse_labels):
@@ -206,7 +213,7 @@ class GAM(torch.nn.Module):
         if get_embedding:
             # lstm_output == self.h0, so can return either
             # can also pass through torch.log first?
-            return torch.log(self.recurrent_block.h0) # lstm_output == self.h0, so can return either
+            return torch.log(lstm_output) # lstm_output == self.h0, so can return either
         else:
             return label_predictions, node, attention_score
 
@@ -218,15 +225,16 @@ class GAMTrainer(object):
     def __init__(self, args, dataset_name):
         self.args = args
         self.model = GAM(self.args, dataset_name=dataset_name)
-        self.setup_graphs()
+        # self.setup_graphs()
         self.logs = create_logs(self.args)
 
-    def setup_graphs(self):
+    def setup_graphs(self, adj_matrices):
         """
         Listing the training and testing graphs in the source folders.
         """
-        self.training_graphs = glob.glob(self.args.train_graph_folder + "*.json")
-        self.test_graphs = glob.glob(self.args.test_graph_folder + "*.json")
+        # self.training_graphs = glob.glob(self.args.train_graph_folder + "*.json")
+        # self.test_graphs = glob.glob(self.args.test_graph_folder + "*.json")
+        self.training_graphs = adj_matrices
 
     def process_graph(self, graph_path=None, batch_loss=None,
                       already_matrix=False, adj=None, target=1):
@@ -293,7 +301,7 @@ class GAMTrainer(object):
                 batch_loss = self.process_graph(graph_path, batch_loss)
         else:
             for a in adj:
-                batch_loss = self.process_graph(already_matrix=already_matrix, adj=a)
+                batch_loss = self.process_graph(batch_loss=batch_loss, already_matrix=already_matrix, adj=a)
         batch_loss.backward(retain_graph=True)
         self.optimizer.step()
         # do weight clipping
@@ -326,7 +334,7 @@ class GAMTrainer(object):
             self.nodes_processed = 0
             batch_range = trange(len(batches))
             for batch in batch_range:
-                self.epoch_loss = self.epoch_loss + self.process_batch(batches[batch])
+                self.epoch_loss = self.epoch_loss + self.process_batch(already_matrix=True, adj=batches[batch])
                 self.nodes_processed = self.nodes_processed + len(batches[batch])
                 loss_score = round(self.epoch_loss/self.nodes_processed, 4)
                 batch_range.set_description("(Loss=%g)" % loss_score)
