@@ -12,6 +12,7 @@ from models.dataset import *
 from models.discriminator import *
 from models.generator import *
 from models.inverter import *
+from models.gw_loss import *
 
 from models.GAM.src.param_parser import *
 from models.GAM.src.gam import *
@@ -28,7 +29,6 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     fxn()
 
-
 def choose_device():
     if torch.cuda.is_available():
         return 'cuda'
@@ -40,10 +40,12 @@ def choose_device():
 # outline for AE:
 # 1. sample true graphs (label: 0), generate graphs from GraphRNN (label: 1)
 # 2. train GraphAttentionMachine on output of (1)
-# 3. generate graphs from GraphRNN again
+# 3. sample true graphs, generate graphs from GraphRNN again
 # 4. pass those graphs only through embedding layers of GAMachine to get their embeddings
 # 5. pass embeddings through GraphRNN
 # 6. compare results of (5) to results of (3) via GW distance
+
+args = None
 
 GAMachineTrainer = GAMTrainer(args, args.dataset_name) # maps from graphs to latent space (of embeddings)
 netG = None
@@ -85,7 +87,7 @@ def train(args, data):
             batch_loss = self.process_graph(
                 batch_loss=batch_loss, 
                 already_matrix=True, 
-                adj=adj, target=0
+                adj=adj, target=0 # may be worth passing classes instead of generic "true" label
             )
         for adj in fake_graphs:
             batch_loss = self.process_graph(
@@ -125,6 +127,7 @@ def train(args, data):
     ### do same for true graphs
     true_graphs = [] # TODO: sample from true dataset, e.g. MUTAG
     
+    # compute embeddings of true_graphs, then pass embeddings to generator for reconstruction
     recon_true_graphs = []
     for true_adj in true_graphs:
         datadict, features, node = GAMachineTrainer.get_datadict_features_node(adj, target=0)
@@ -134,8 +137,14 @@ def train(args, data):
         recon_graph = netG(true_embedding, X, Y, Y_len)
         recon_true_graphs.append(recon_graph)
 
-    # TODO: use GW distance on fake_graphs and recon_fake_graphs; gromov_wasserstein
-    # TODO: use GW distance on true_graphs and recon_true_graphs; gromov_wasserstein
+    batch_gw_loss = 0
+    # compute GW distance on true_graphs/fake_graphs and recon_true_graphs/recon_fake_graphs
+    for adj_o, adj_r in zip(true_graphs, recon_true_graphs):
+        batch_gw_loss += GWLoss(adj_o, adj_r)
+    for adj_o, adj_r in zip(fake_graphs, recon_fake_graphs):
+        batch_gw_loss += GWLoss(adj_o, adj_r)
+    batch_gw_loss.backward()
+    optimizer_generator.step()
 
     return
 
