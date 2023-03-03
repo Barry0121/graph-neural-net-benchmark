@@ -52,7 +52,7 @@ def parameter_parser():
     parser.add_argument("--time",
                         type=int,
                         default=10,
-	                help="Time budget for steps. Default is 20.")
+	                help="Time budget for steps. Default is 10.")
 
     parser.add_argument("--repetitions",
                         type=int,
@@ -73,9 +73,15 @@ def parameter_parser():
                         type=float,
                         default=10**-5,
 	                help="Learning rate. Default is 10^-5.")
+    
     parser.add_argument("--max-node-degree",
                         type=int,
                         default=100,
 	                help="Max degree of nodes in the dataset. Default is 100.")
+    
+    parser.add_argument("--graph-type",
+                        type=str,
+                        default="MUTAG",
+	                help="Dataset name")
 
     return parser.parse_args()

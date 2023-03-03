@@ -12,7 +12,7 @@ from models.dataset import *
 from models.discriminator import *
 from models.generator import *
 from models.inverter import *
-from models.gw_loss import *
+from gw_loss import *
 
 from models.GAM.src.param_parser import *
 from models.GAM.src.gam import *
