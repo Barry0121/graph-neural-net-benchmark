@@ -79,7 +79,8 @@ def create_features(data, identifiers, use_graph=False, adj=None):
     else:
         graph = None
         for node in range(adj.shape[0]):
-            features.append([1.0 if data['labels'][str(node)] == i else 0.0 for i in range(len(identifiers))])
+            # print(data['labels'][str(node)])
+            features.append([1.0 if float(data['labels'][str(node)]) == i else 0.0 for i in range(len(identifiers))])
     features = np.array(features, dtype=np.float32)
     features = torch.tensor(features)
     return graph, features

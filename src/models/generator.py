@@ -436,7 +436,12 @@ class GraphRNN(nn.Module):
         # apply thresholding on sigmoid results
         # return (y_output_adj >= 0.5).to(torch.int)
         # print(y_output_adj)
+        
         output = torch.where(y_output_adj < 0.5, 0.0, 1.0).to(torch.int)
+        I = torch.eye(output.size(1),output.size(2))
+        I = torch.unsqueeze(I, 0)
+        I = I.expand(output.size(0), output.size(1), output.size(2))  
+        output = output + I
         # print(torch.sum(output))
         return output
 

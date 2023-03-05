@@ -249,6 +249,7 @@ class GAMTrainer(object):
             'labels': degrees, # node degree of each node
             'inverse_labels': inv_degrees # what node degrees correspond to what nodes
         }
+
         _, features = create_features(data, self.model.identifiers, use_graph=False, adj=adj)
         node = random.choice(nodes).item()
         return data, features, node

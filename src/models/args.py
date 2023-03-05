@@ -46,8 +46,10 @@ class Args():
         self.graph_type = 'MUTAG'
         self.max_node_degree =  100
         self.step_dimensions = 32
-        self.combined_dimensions = 64
+        self.combined_dimensions = 128
         self.embedding_iters = 5
+        self.time = 3
+        self.gamma = 10e-5
         # self.embedding_batch_size = 
 
         # if none, then auto calculate
