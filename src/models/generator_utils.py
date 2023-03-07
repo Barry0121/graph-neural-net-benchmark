@@ -314,7 +314,6 @@ def decode_adj(adj_output):
     n = adj_full.shape[0]
     adj_full[1:n, 0:n-1] = torch.tril(adj, 0)
     adj_full = adj_full + adj_full.T
-
     return adj_full
 
 def get_graph(adj):

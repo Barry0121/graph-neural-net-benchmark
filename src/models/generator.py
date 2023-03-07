@@ -398,7 +398,7 @@ class GraphRNN(nn.Module):
     #     print(y_pred.shape)
     #     return decode_adj(y_pred), decode_adj(sorted_output_y)
 
-    def forward(self, X, args, output_batch_size=1):
+    def forward(self, X):
         """
         X: noise/latent vector
         args: arguments dictionary
