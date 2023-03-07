@@ -177,20 +177,24 @@ def train(args, train_inverter=True, num_layers=4, clamp_lower=-0.1, clamp_upper
 
             # ========== Train Inverter =================
             if train_inverter:
-                original_graphs = adj_mat # shape: (batch_size, padded_size, padded_size); in the case for MUTAG, padded_size is 29
+                netG.eval()
+                netI.train(True)
+                original_graphs = adj_mat
                 graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in adj_mat]
                 # retrain graph2vec
                 graph2vec.fit(graph_lst)
                 # genearte embedding
                 embeddings = torch.Tensor(graph2vec.infer(graph_lst))
                 I_output = netI(torch.reshape(embeddings, (embeddings.shape[0], -1)))
-                # print(I_output.shape)
-                G_pred_graphs = netG(X=I_output, args=args, output_batch_size=args.batch_size)
+                with torch.no_grad():
+                    G_pred_graphs = netG(I_output, X, Y, Y_len)
                 reconst_graphs = G_pred_graphs
+
                 # noise
-                G_pred_noise = netG(X=noise, args=args, output_batch_size=args.batch_size) # shape: (batch_size, padded_size, padded_size)
-                # print(G_pred_noise.shape)
-                noise_graph_lst = [nx.from_numpy_matrix(am.numpy()) for am in G_pred_noise]
+                noise = torch.randn(args.batch_size, noise_dim)
+                with torch.no_grad():
+                    G_pred_noise = netG(noise, X, Y, Y_len)
+                noise_graph_lst = [nx.from_numpy_matrix(am.detach().numpy()) for am in G_pred_noise]
                 noise_embeddings = torch.Tensor(graph2vec.infer(noise_graph_lst))
                 reconst_noise = netI(noise_embeddings)
                 # compute loss and update inverter loss
@@ -198,7 +202,7 @@ def train(args, train_inverter=True, num_layers=4, clamp_lower=-0.1, clamp_upper
                 reconst_graphs = reconst_graphs.to(device)
                 noise = noise.to(device)
                 reconst_noise = reconst_noise.to(device)
-                iloss = lossI(original_graphs, reconst_graphs, noise, reconst_noise)
+                iloss = lossI(original_graphs.float(), reconst_graphs.float(), noise.float(), reconst_noise.float()).float()
                 iloss.backward()
                 optimizerI.step()
 
