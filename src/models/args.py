@@ -43,16 +43,7 @@ class Args():
         # dataset names
         self.graph_type = 'PROTEINS'
         # self.graph_type = 'ENZYMES'
-        self.graph_type = 'MUTAG'
-        self.max_node_degree =  100
-        self.step_dimensions = 32
-        self.combined_dimensions = 128
-        self.embedding_iters = 5
-        self.time = 3
-        self.gamma = 10e-5
-        self.learning_rate = 10e-6
-        self.weight_decay = 10e-5
-        # self.embedding_batch_size =
+        # self.graph_type = 'MUTAG'
 
         # if none, then auto calculate
         self.max_num_node = None # max number of nodes in a graph

@@ -65,7 +65,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
     # get the dataset
     train, labels = get_dataset_with_label(args.graph_type) # entire dataset as train
-    train_dataset = Graph_sequence_sampler_pytorch_nobfs(train, labels, args)
+    train_dataset = Graph_sequence_sampler_pytorch(train, labels, args)
     train_loader = get_dataloader_labels(train_dataset, args)
     noise_dim = args.hidden_size_rnn
     print('noise dimension is: ', noise_dim)
@@ -77,13 +77,10 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
     # netD_args['dataset_name'] = args.graph_type
     netI = Inverter(input_dim=512, output_dim=args.hidden_size_rnn, hidden_dim=256)
     netG = GraphRNN(args=args)
+    # netG_rnn = netG.rnn
+    # netG_output = netG.output
     netD = NetD(stat_input_dim=128, stat_hidden_dim=64, num_stat=2)
-
-    # set up a register_hook to check parameter gradient
-    # for param in netD.parameters():
-    #     h = param.register_hook(lambda grad: print(f"Parameter Update with gradient {grad}"))
-    hd = list(netD.parameters())[0].register_hook(lambda grad: print(f"NetD parameter Update with gradient {grad}"))
-    hg = list(netG.parameters())[0].register_hook(lambda grad: print(f"NetG parameter Update with gradient {grad}"))
+    # netD = SimpleNN(621, 1)
 
 
     # check model parameters
@@ -124,6 +121,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # zero grad
             optimizerI.zero_grad()
             optimizerD.zero_grad()
+            # optimizerG.zero_grad()
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
             # netG.clear_gradient_opts()
@@ -136,10 +134,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # Discriminator Update
             ######################
             # number of iteration to train the discriminator
-            if gen_iterations < 25 or gen_iterations % 500 == 0:
-                Diters = 20
-            else:
-                Diters = 5
+            Diters = 10
             j = 0 # counter for 1, 2, ... Diters
 
             # enable training
@@ -156,10 +151,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
 
                 # train with real
                 inputs = torch.clone(adj_mat)
-                # test_input = inputs.reshape(args.batch_size, -1).to(torch.float32)
                 D_pred = netD(inputs)
-                # print(D_pred.requires_grad, D_pred.grad)
-                # errD_real = Variable(torch.mean(D_pred), requires_grad=True) # TODO: check mean behavior
                 errD_real = D_pred
                 errD_real.backward() # discriminator should assign 1's to true samples
                 # print("Error Real: ", errD_real)
@@ -168,12 +160,9 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
                 # train with fake
                 input = troch.randn(args.batch_size, noise_dim) # (batch_size, hidden_size)
                 # insert data processing
-                fake = netG(input)
-                print(netG.parameters()[0].grad)
+                # print(X.shape, Y.shape)
+                fake = netG(noise, X, Y, Y_len)
                 fake_tensor = netD(fake)
-                # fake_tensor = torch.Tensor([netD(nx.from_numpy_matrix(f)) for f in fake.numpy()])
-                # errD_fake = Variable(torch.mean(fake_tensor), requires_grad=True)
-                # errD_fake = torch.mean(fake_tensor)
                 errD_fake = fake_tensor
                 errD_fake.backward(mone) # discriminator should assign -1's to fake samples??
 
@@ -200,7 +189,7 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # ========== Train Generator ==================
             netD.train(False)
             netG.train(True)
-            netG.clear_gradient_models()
+            # netG.clear_gradient_models()
             G_optimizer_rnn.zero_grad()
             G_optimizer_output.zero_grad()
             # optimizerG.zero_grad()
@@ -208,24 +197,13 @@ def train(args, train_inverter=False, num_layers=4, clamp_lower=-0.1, clamp_uppe
             # make sure we feed a full batch of noise
             # noisev = noise.normal_(0,1)
             noisev = torch.randn(args.batch_size, noise_dim)
-            fake = netG(noisev)
-            # print(fake.shape, fake.requires_grad, fake.grad)
-            # fake_tensor = netD(fake)
-            # print(fake_tensor.shape, fake_tensor.requires_grad, fake_tensor.grad)
-            # errG = Variable(torch.mean(fake_tensor), requires_grad=True)
-            # errG = fake_tensor
-            errG = torch.mean(fake)
-            # print(errG.is_leaf)
-            errG.backward(one)
-            # print(errG.grad)
-            # print(fake.grad.size())
-            # print(errG.requires_grad, errG.grad)
-            # optimizerG.step()
+            fake = netG(noisev, X, Y, Y_len)
+            fake_tensor = netD(fake)
+            errG = fake_tensor
+            errG.backward()
             G_optimizer_rnn.step()
             G_optimizer_output.step()
-            # print(fake.grad.size())
             # netG.all_steps()
-            gen_iterations += 1
 
 
             # Winston's outline for inverter training
