@@ -398,36 +398,37 @@ class GraphRNN(nn.Module):
     #     print(y_pred.shape)
     #     return decode_adj(y_pred), decode_adj(sorted_output_y)
 
-    def forward(self, X):
+    def forward(self, X, args, output_batch_size=1):
         """
         X: noise/latent vector
         args: arguments dictionary
         test_batch_size: number of graphs you want to generate
         """
         # provide a option to change number of graphs generated
-        output_batch_size = self.args.test_batch_size
+        if output_batch_size is None:
+            output_batch_size = args.test_batch_size
         input_hidden = torch.stack(self.rnn.num_layers*[X]).to(self.device)
         self.rnn.hidden = input_hidden # expected shape: (num_layer, batch_size, hidden_size)
 
         # TODO: change this part to noise vector might need resizing
-        y_pred_long = Variable(torch.zeros(output_batch_size, self.args.max_num_node, self.args.max_prev_node)).to(self.device) # discrete prediction
-        # x_step = X.to(self.device) # shape:(batch_size, 1, self.args.max_prev_node)
-        x_step = Variable(torch.ones(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
+        y_pred_long = Variable(torch.zeros(output_batch_size, args.max_num_node, args.max_prev_node)).to(self.device) # discrete prediction
+        # x_step = X.to(self.device) # shape:(batch_size, 1, args.max_prev_node)
+        x_step = Variable(torch.ones(output_batch_size, 1, args.max_prev_node)).to(self.device)
 
         # iterative graph generation
-        for i in range(self.args.max_num_node):
+        for i in range(args.max_num_node):
             # for each node
             # 1. we use rnn to create new node embedding
             # 2. we use output to create new edges
 
             # (1)
             h = self.rnn(x_step)
-            hidden_null = Variable(torch.zeros(self.args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
-            x_step = Variable(torch.zeros(output_batch_size, 1, self.args.max_prev_node)).to(self.device)
+            hidden_null = Variable(torch.zeros(args.num_layers - 1, h.size(0), h.size(2))).to(self.device)
+            x_step = Variable(torch.zeros(output_batch_size, 1, args.max_prev_node)).to(self.device)
             output_x_step = Variable(torch.ones(output_batch_size, 1, 1)).to(self.device)
             # (2)
             self.output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0).to(self.device)
-            for j in range(min(self.args.max_prev_node,i+1)):
+            for j in range(min(args.max_prev_node,i+1)):
                 output_y_pred_step = self.output(output_x_step)
                 # print(output_y_pred_step.requires_grad)
                 output_x_step = sample_sigmoid(output_y_pred_step, sample=True, sample_time=1, device=self.device)
