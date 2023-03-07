@@ -20,7 +20,7 @@ from collections import OrderedDict
 import math
 import numpy as np
 import time as tm
-# from args import *
+from args import *
 
 
 def choose_device():
@@ -302,20 +302,19 @@ def decode_adj(adj_output):
     '''
     max_prev_node = adj_output.shape[1]
     adj = torch.zeros((adj_output.shape[0], adj_output.shape[0]))
-    # print(adj.size())
     reverse_adj = torch.flip(adj_output, dims=(1,))
     for i in range(adj_output.shape[0]):
         input_start = max(0, i - max_prev_node + 1)
         input_end = i + 1
         output_start = max_prev_node + max(0, i - max_prev_node + 1) - (i + 1)
         output_end = max_prev_node
-        # adj[i, input_start:input_end] = reverse_adj[i,output_start:output_end][:, 0]
-        adj[i, input_start:input_end] = reverse_adj[i,output_start:output_end]
+        # adj[i, input_start:input_end] = adj_output[i,::-1][output_start:output_end]
+        adj[i, input_start:input_end] = reverse_adj[i,:][output_start:output_end]
     adj_full = torch.zeros((adj_output.shape[0]+1, adj_output.shape[0]+1))
     n = adj_full.shape[0]
     adj_full[1:n, 0:n-1] = torch.tril(adj, 0)
     adj_full = adj_full + adj_full.T
-    # print(adj_full.size())
+
     return adj_full
 
 def get_graph(adj):
@@ -432,7 +431,8 @@ def test_rnn_epoch(epoch, args, rnn, output, test_batch_size=16):
         h = rnn(x_step)
         # output.hidden = h.permute(1,0,2)
         hidden_null = Variable(torch.zeros(args.num_layers - 1, h.size(0), h.size(2))).to(choose_device())
-        output.hidden = torch.cat((h.permute(1,0,2), hidden_null), dim=0)  # num_layers, batch_size, hidden_size
+        output.hidden = torch.cat((h.permute(1,0,2), hidden_null),
+                                  dim=0)  # num_layers, batch_size, hidden_size
         x_step = Variable(torch.zeros(test_batch_size,1,args.max_prev_node)).to(choose_device())
         output_x_step = Variable(torch.ones(test_batch_size,1,1)).to(choose_device())
         for j in range(min(args.max_prev_node,i+1)):

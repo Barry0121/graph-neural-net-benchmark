@@ -41,7 +41,7 @@ class Args():
         #     self.graph_type = self.graph_type+str(self.noise)
 
         # dataset names
-        # self.graph_type = 'PROTEINS'
+        self.graph_type = 'PROTEINS'
         # self.graph_type = 'ENZYMES'
         self.graph_type = 'MUTAG'
         self.max_node_degree =  100
@@ -52,7 +52,7 @@ class Args():
         self.gamma = 10e-5
         self.learning_rate = 10e-6
         self.weight_decay = 10e-5
-        # self.embedding_batch_size = 
+        # self.embedding_batch_size =
 
         # if none, then auto calculate
         self.max_num_node = None # max number of nodes in a graph
@@ -70,8 +70,8 @@ class Args():
         self.embedding_size_rnn_output = 8 # the embedding size for output rnn
         self.embedding_size_output = int(64/self.parameter_shrink) # the embedding size for output (VAE/MLP)
 
-        self.batch_size = 8
-        self.test_batch_size = 1
+        self.batch_size = 32
+        self.test_batch_size = 32
         self.test_total_size = 1000
         self.num_layers = 4
 
