@@ -1,6 +1,4 @@
-"""
-Run this file to train WGAN model
-"""
+from train import *
 
 from src.train import *
 from src.models.args import *
