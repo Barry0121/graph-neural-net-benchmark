@@ -23,6 +23,7 @@ import torch.nn as nn
 # only have "degree histogram" and "clustering coefficients". Surely, more statistics can better
 # describe X and whatever the generator produces.
 
+
 class NetD(nn.Module):
     def __init__(self, stat_input_dim, stat_hidden_dim, num_stat):
         """
@@ -57,33 +58,19 @@ class NetD(nn.Module):
         # possible modifications:
         # 1) use torch.histogram instead of np.histogram?
         # 2) add lots more statistics, these probably aren't enough to characterize a graph
-        if len(G.shape) == 3:
-            graph = [nx.from_numpy_matrix(g.detach().numpy()) for g in G]
-            degree_hist = np.array([np.histogram(
-                np.array(nx.degree_histogram(g)),
-                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0] for g in graph])
-            degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
-            degree_hist = self.stat_NNs[0](degree_hist)
-            clustering_coefs = np.array([np.histogram(
-                list(nx.clustering(g).values()),
-                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0] for g in graph])
-            clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
-            clustering_coefs = self.stat_NNs[1](clustering_coefs)
-            stats = torch.cat([degree_hist, clustering_coefs], dim=1)
-            out = torch.mean(self.combine(stats))
-        else:
-            # ====== QUICK FIX VERSION ======
-            g = nx.from_numpy_matrix(G.detach().numpy())
-            degree_hist = np.histogram(np.array(nx.degree_histogram(g)),
-                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0]
-            degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
-            degree_hist = self.stat_NNs[0](degree_hist)
-            clustering_coefs = np.histogram(list(nx.clustering(g).values()),
-                bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0]
-            clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
-            clustering_coefs = self.stat_NNs[1](clustering_coefs)
-            stats = torch.cat([degree_hist, clustering_coefs], dim=0)
-            out = torch.mean(self.combine(stats))
+        graph = [nx.from_numpy_matrix(g.detach().numpy()) for g in G]
+        degree_hist = np.array([np.histogram(
+            np.array(nx.degree_histogram(g)),
+            bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0] for g in graph])
+        degree_hist = torch.from_numpy(degree_hist).type(torch.FloatTensor)
+        degree_hist = self.stat_NNs[0](degree_hist)
+        clustering_coefs = np.array([np.histogram(
+            list(nx.clustering(g).values()),
+            bins=self.stat_input_dim, range=(0.0, 1.0), density=False)[0] for g in graph])
+        clustering_coefs = torch.from_numpy(clustering_coefs).type(torch.FloatTensor)
+        clustering_coefs = self.stat_NNs[1](clustering_coefs)
+        stats = torch.cat([degree_hist, clustering_coefs], dim=1)
+        out = torch.mean(self.combine(stats))
         return out
 
 class SimpleNN(nn.Module):
@@ -112,7 +99,6 @@ class SimpleNN(nn.Module):
         param x: the vector representing a certain statistic
         """
         x = self.reduce(x)
-        # return torch.mean(self.act(x))
         return self.act(x)
 
 class TestNN(nn.Module):

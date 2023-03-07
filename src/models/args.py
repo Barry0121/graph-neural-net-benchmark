@@ -41,9 +41,9 @@ class Args():
         #     self.graph_type = self.graph_type+str(self.noise)
 
         # dataset names
-        self.graph_type = 'PROTEINS'
+        # self.graph_type = 'PROTEINS'
         # self.graph_type = 'ENZYMES'
-        # self.graph_type = 'MUTAG'
+        self.graph_type = 'MUTAG'
 
         # if none, then auto calculate
         self.max_num_node = None # max number of nodes in a graph
