@@ -391,7 +391,7 @@ class GraphRNN(nn.Module):
         # print("sorted batch size: ", batch_size)
         return x, y, output_x, output_y, y_len, output_x_len, batch_size
 
-    def forward(self, noise, X, Y, length):
+    def forward(self, noise, X, Y, length, device='cuda'):
         """
         X: noise/latent vector
         args: arguments dictionary
@@ -413,9 +413,9 @@ class GraphRNN(nn.Module):
         # print('padded h shape: ', h.shape)
         # reverse h
         idx = [i for i in range(h.size(0) - 1, -1, -1)]
-        idx = Variable(torch.LongTensor(idx)).cuda()
+        idx = Variable(torch.LongTensor(idx)).to(device)
         h = h.index_select(0, idx)
-        hidden_null = Variable(torch.zeros(self.rnn.num_layers-1, h.size(0), h.size(1))).cuda()
+        hidden_null = Variable(torch.zeros(self.rnn.num_layers-1, h.size(0), h.size(1))).to(device)
         # print('hidden null shape: ', hidden_null.shape)
         self.output.hidden = torch.cat((h.view(1,h.size(0),h.size(1)),hidden_null),dim=0) # num_layers, batch_size, hidden_size
         # print("ouptut x shape: ", output_x.shape)
