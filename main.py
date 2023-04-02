@@ -11,6 +11,7 @@ args = Args()
 print("Start Training...")
 # this will train the models
 # saved models and weights will be at the specified path in args.py
+# start training
 train(args, train_inverter=True)
 print("Finish Training!")
 get_tsne_plots(args)
