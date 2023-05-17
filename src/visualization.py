@@ -201,4 +201,5 @@ def plot_losses():
     plt.plot(dloss, label='discriminator')
     plt.plot(gloss, label='generator')
     plt.plot(iloss, label='inverter')
+    plt.legned()
     plt.savefig("./visualizatinos/three_losses.png")
